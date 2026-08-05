@@ -3,7 +3,7 @@
 /// Emitted once per `execute()` (simple or extended path) when a
 /// [QueryPhaseSink] is wired into `PostgresQueryExecutor`. Used by the
 /// `driver-us-attribution` task to decompose the `driver_us` measured in
-/// the holistic benchmark 
+/// the holistic benchmark
 /// into submit / wait / decode, deciding where the codec-plan task (P2)
 /// attacks first.
 ///

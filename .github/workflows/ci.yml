@@ -54,25 +54,73 @@ jobs:
           cmake -S native/c -B native/c/build
           cmake --build native/c/build --parallel
 
-      - name: Verify the ABI loads
-        # The resolver walks its candidate paths and each driver asserts its ABI
-        # version against the C library. A mismatch between the Dart constants and
-        # the headers surfaces here rather than as memory corruption at runtime.
-        run: |
-          ls -la native/c/build
-          dart pub get
-          dart test test/native_lib_resolver_test.dart
+      - run: dart pub get
+
+      - name: Verify each driver loads and its ABI matches
+        # Exercises the resolver and the load-time ABI assertion for all four
+        # drivers. A mismatch between the Dart constants and the C headers
+        # surfaces here rather than as memory corruption at runtime.
+        run: dart run bin/doctor.dart
 
       - name: Run tests that need no database
-        # The integration suites need live PostgreSQL/MySQL/MongoDB instances and
-        # run in the benchmark harness, not here. These exercise decoding,
-        # marshalling and the public API surface, which is where a regression from
-        # a refactor is most likely to land.
+        # Only these four are genuinely database-free. Everything else either
+        # needs a live server or skips silently, which makes it worthless as a
+        # signal. The PostgreSQL integration suite runs in the job below.
         run: |
           dart test \
             test/api \
+            test/binary_decoder_test.dart \
             test/mongo/bson_roundtrip_test.dart \
-            test/param_marshalling_test.dart \
+            test/param_marshalling_test.dart
+
+  integration-postgres:
+    name: integration (postgres)
+    runs-on: ubuntu-latest
+    # Service containers need Docker, which GitHub's macOS runners do not have,
+    # so the integration suite is Linux-only.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: "123"
+          POSTGRES_DB: teste
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d teste"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install client libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential \
+            libpq-dev libmysqlclient-dev libmongoc-dev libsqlite3-dev
+
+      - name: Build native libraries
+        run: |
+          cmake -S native/c -B native/c/build
+          cmake --build native/c/build --parallel
+
+      - run: dart pub get
+
+      - name: Run the PostgreSQL suite against a live server
+        # --concurrency=1 is required, not a precaution. These suites create and
+        # drop their own tables against one shared database; `dart test` runs
+        # suites in parallel by default, so they race on the same table names and
+        # fail non-deterministically. Serialising them is what makes the result
+        # trustworthy.
+        run: |
+          dart test --concurrency=1 \
             test/repository_test.dart \
-            test/result_row_test.dart \
-            test/zero_copy_test.dart
+            test/with_transaction_test.dart \
+            test/connection_pool_integration_test.dart \
+            test/postgres_nontx_connection_test.dart \
+            test/sql_injection_blocked_test.dart
