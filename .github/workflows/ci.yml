@@ -42,7 +42,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake build-essential \
+            cmake build-essential pkg-config \
             libpq-dev libmysqlclient-dev libmongoc-dev libsqlite3-dev
 
       - name: Install client libraries (macOS)
@@ -101,7 +101,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake build-essential \
+            cmake build-essential pkg-config \
             libpq-dev libmysqlclient-dev libmongoc-dev libsqlite3-dev
 
       - name: Build native libraries

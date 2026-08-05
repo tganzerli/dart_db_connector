@@ -125,8 +125,13 @@ surfaces if you actually touch that driver.
 ## Building from source
 
 Needed on any platform without a pre-built binary, or when working from a clone.
-Requires CMake 3.20+, a C11 compiler, and the `-dev` headers of whichever clients
-you want.
+Requires CMake 3.20+, a C11 compiler, `pkg-config`, and the `-dev` headers of
+whichever clients you want. On Debian/Ubuntu:
+
+```bash
+sudo apt-get install cmake build-essential pkg-config \
+  libpq-dev libmysqlclient-dev libmongoc-dev libsqlite3-dev
+```
 
 ```bash
 cmake -S native/c -B native/c/build

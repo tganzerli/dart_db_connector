@@ -246,11 +246,15 @@ if(BUILD_NATIVE_SQLITE)
             ${SQLite3_INCLUDE_DIRS}
     )
 
-    target_link_libraries(native_sqlite
-        PRIVATE
-            SQLite3::SQLite3
-            Threads::Threads
-    )
+    # FindSQLite3 defines the SQLite3::SQLite3 imported target on some
+    # platforms and only the SQLite3_LIBRARIES variable on others (notably
+    # Debian/Ubuntu). Prefer the target when it exists and fall back to the
+    # variable, so the build works on both.
+    if(TARGET SQLite3::SQLite3)
+        target_link_libraries(native_sqlite PRIVATE SQLite3::SQLite3 Threads::Threads)
+    else()
+        target_link_libraries(native_sqlite PRIVATE ${SQLite3_LIBRARIES} Threads::Threads)
+    endif()
 
     target_compile_options(native_sqlite PRIVATE
         -Wall -Wextra -Wpedantic
