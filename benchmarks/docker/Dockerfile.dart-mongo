@@ -26,26 +26,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-COPY native /build/native
-COPY dart /build/dart
-COPY benchmarks /build/benchmarks
+COPY packages/dart_db_connector /build/packages/dart_db_connector
+COPY benchmarks/harness-dart /build/benchmarks/harness-dart
 
-RUN rm -rf /build/native/c/build \
+RUN rm -rf /build/packages/dart_db_connector/native/c/build \
     && find /build -type d -name '.dart_tool' -exec rm -rf {} + 2>/dev/null || true
 
 # Build ONLY libnative_mongo.so for Linux (skip the MySQL + SQLite targets;
 # their find_package(MySQL/SQLite3) would otherwise fail without their -dev
 # packages installed in this image).
-RUN cd /build/native/c \
+RUN cd /build/packages/dart_db_connector/native/c \
     && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_NATIVE_MYSQL=OFF -DBUILD_NATIVE_SQLITE=OFF \
     && cmake --build build --target native_mongo
 
-RUN cd /build/dart && dart pub get
-RUN cd /build/benchmarks && dart pub get
+RUN cd /build/packages/dart_db_connector && dart pub get
+RUN cd /build/benchmarks/harness-dart && dart pub get
 
 RUN mkdir -p /out \
-    && cd /build/benchmarks \
+    && cd /build/benchmarks/harness-dart \
     && dart compile exe scripts/ycsb/bench_ycsb_mongo.dart -o /out/bench_ycsb_mongo
 
 # Place the .so at the resolver's pub-cache-mirror path so the AOT exe finds
@@ -58,7 +57,7 @@ RUN MACHINE="$(uname -m)" \
        esac \
     && PLAT="linux-$ARCH" \
     && mkdir -p "/out/lib/_native/$PLAT" \
-    && cp /build/native/c/build/libnative_mongo.so "/out/lib/_native/$PLAT/" \
+    && cp /build/packages/dart_db_connector/native/c/build/libnative_mongo.so "/out/lib/_native/$PLAT/" \
     && echo "[dockerfile] native lib at /out/lib/_native/$PLAT/libnative_mongo.so"
 
 # ─────────── Stage 2: runtime ───────────

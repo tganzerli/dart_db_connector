@@ -60,13 +60,13 @@ print(json.dumps(d, ensure_ascii=False))
 wait_postgres_healthy() {
   local timeout=60 elapsed=0
   while [ $elapsed -lt $timeout ]; do
-    docker compose ps postgres --format json 2>/dev/null | grep -q '"Health":"healthy"' && return 0
+    docker compose -f compose.postgres.yml ps postgres --format json 2>/dev/null | grep -q '"Health":"healthy"' && return 0
     sleep 1; elapsed=$((elapsed + 1))
   done
   echo "[error] postgres not healthy within ${timeout}s" >&2; return 1
 }
 seed_db() {
-  docker compose run --rm --entrypoint /bin/sh postgres \
+  docker compose -f compose.postgres.yml run --rm --entrypoint /bin/sh postgres \
     -c "PGPASSWORD=123 psql -h postgres -U postgres -d teste -q -f /fixtures/te_schema.sql" \
     >/dev/null 2>&1 || \
   docker run --rm --network ddc-bench-net -v "$(pwd)/../../benchmarks/fixtures:/fixtures:ro" \
@@ -106,22 +106,22 @@ isolated_run() {
     return 0
   fi
 
-  docker compose down -v 2>/dev/null || true
+  docker compose -f compose.postgres.yml down -v 2>/dev/null || true
   export HTTP_CPUS="$vcpu" POSTGRES_CPUS="$vcpu"
-  docker compose up -d postgres >/dev/null
+  docker compose -f compose.postgres.yml up -d postgres >/dev/null
   wait_postgres_healthy || { log_event event=fail reason=pg stack="$stack"; return 1; }
   seed_db || { log_event event=fail reason=seed stack="$stack"; return 1; }
-  POOL_SIZE="$topology" docker compose up -d "$service" >/dev/null \
+  POOL_SIZE="$topology" docker compose -f compose.postgres.yml up -d "$service" >/dev/null \
     || { log_event event=fail reason=up stack="$stack"; return 1; }
-  wait_http_ready "$service" || { log_event event=fail reason=notready stack="$stack"; docker compose down -v 2>/dev/null||true; return 1; }
+  wait_http_ready "$service" || { log_event event=fail reason=notready stack="$stack"; docker compose -f compose.postgres.yml down -v 2>/dev/null||true; return 1; }
 
   local url; url=$(endpoint_path "$endpoint")
   # warmup (descartado)
-  docker compose run --rm --no-deps --entrypoint /usr/local/bin/wrk bench-loader \
+  docker compose -f compose.postgres.yml run --rm --no-deps --entrypoint /usr/local/bin/wrk bench-loader \
     -t"$WRK_THREADS" -c"$WRK_CONNS" -d"${WARMUP_SEC}s" -H "Connection: keep-alive" \
     "http://${service}:8080${url}" >/dev/null 2>&1 || true
   # sustained (medido)
-  local wrk_stdout; wrk_stdout=$(docker compose run --rm --no-deps --entrypoint /usr/local/bin/wrk bench-loader \
+  local wrk_stdout; wrk_stdout=$(docker compose -f compose.postgres.yml run --rm --no-deps --entrypoint /usr/local/bin/wrk bench-loader \
     -t"$WRK_THREADS" -c"$WRK_CONNS" -d"${SUSTAINED_SEC}s" --latency -H "Connection: keep-alive" \
     "http://${service}:8080${url}" 2>&1 || true)
 
@@ -144,13 +144,13 @@ if (not os.path.exists(w)) or os.path.getsize(w)==0:
 print(f"{os.environ['STACK']},{os.environ['ENDPOINT']},{os.environ['TOPOLOGY']},{os.environ['VCPU']},{os.environ['SESSION']},{os.environ['REP']},{rps},{p50},{p75},{p90},{p99}")
 EOF
 
-  docker compose down -v 2>/dev/null || true
+  docker compose -f compose.postgres.yml down -v 2>/dev/null || true
   log_event event=ok stack="$stack" endpoint="$endpoint" topology="$topology" vcpu="$vcpu" session="$session" rep="$rep"
   sleep 5
 }
 
 if [ "$DRY_RUN" != "1" ]; then
-  echo "[setup] build bench-loader ..."; docker compose build bench-loader 2>&1 | tail -2 || true
+  echo "[setup] build bench-loader ..."; docker compose -f compose.postgres.yml build bench-loader 2>&1 | tail -2 || true
 fi
 n=$(( ${#VCPU_ARR[@]} * SESSIONS * ${#STACKS[@]} * ${#ENDPOINTS[@]} * ${#TOPOLOGIES[@]} * REPS ))
 echo "[setup] $(date -u +%FT%TZ) | ${#VCPU_ARR[@]} vCPU × ${SESSIONS} sessões × ${#STACKS[@]} stacks × ${#ENDPOINTS[@]} endpoints × ${#TOPOLOGIES[@]} pool × ${REPS} reps = ${n} runs"

@@ -22,7 +22,7 @@ services:
   bench-dart-mongo:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.dart-mongo
+      dockerfile: benchmarks/docker/Dockerfile.dart-mongo
     depends_on:
       mongo:
         condition: service_healthy
@@ -41,7 +41,7 @@ services:
   bench-go-mongo:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.go-mongo
+      dockerfile: benchmarks/docker/Dockerfile.go-mongo
     depends_on:
       mongo:
         condition: service_healthy

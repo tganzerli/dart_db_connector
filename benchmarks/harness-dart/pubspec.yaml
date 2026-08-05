@@ -1,0 +1,16 @@
+name: bench_harness
+description: Benchmark harness for dart_db_connector vs baseline drivers.
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  dart_db_connector:
+    path: ../../packages/dart_db_connector
+  benchmark_harness: ^2.2.0
+  ffi: ^2.1.0
+  postgres: 3.5.11  # pinned exact for bench reproducibility (O — cross-lang delta)
+  mysql_client: ^0.0.27
+  mongo_dart: ^0.10.9
+  sqlite3: ^3.5.0

@@ -8,10 +8,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /src
 
-COPY bench/node/package.json bench/node/package-lock.json ./
+COPY benchmarks/drivers/node/package.json benchmarks/drivers/node/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-COPY bench/node/ .
+COPY benchmarks/drivers/node/ .
 
 FROM node:20-alpine
 

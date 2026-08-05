@@ -1,4 +1,4 @@
-# bench/http/dart-pkg-mysql — Shelf + mysql_client 0.0.27 (pub.dev).
+# benchmarks/http/dart-pkg-mysql — Shelf + mysql_client 0.0.27 (pub.dev).
 #
 # Pure-Dart driver — no native lib, no C toolchain (mysql_client speaks the
 # MySQL wire protocol directly, so no libmysqlclient/libmariadb at runtime).
@@ -18,12 +18,12 @@ WORKDIR /app
 
 # Cache `pub get` on its own layer — `pubspec.lock` is committed so the
 # offline run is reproducible.
-COPY bench/http/dart-pkg-mysql/pubspec.* ./
+COPY benchmarks/http/dart-pkg-mysql/pubspec.* ./
 RUN dart pub get
 
 # Now bring in the rest of the source; rerun pub get --offline to
 # refresh anything that might have changed locally but not in pubspec.
-COPY bench/http/dart-pkg-mysql/ ./
+COPY benchmarks/http/dart-pkg-mysql/ ./
 RUN dart pub get --offline
 
 # Structured AOT bundle: build/cli/<platform>/bundle/{bin/server, lib/}.

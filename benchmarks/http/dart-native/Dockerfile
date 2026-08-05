@@ -1,4 +1,4 @@
-# bench/http/dart-native — Shelf + dart_db_connector (FFI over libpq).
+# benchmarks/http/dart-native — Shelf + dart_db_connector (FFI over libpq).
 #
 # Multi-stage; runtime stays on debian:stable-slim because libpq5 is a
 # runtime dependency of libnative_db.so (rules out FROM scratch — static
@@ -27,8 +27,8 @@ WORKDIR /build
 
 # 1) Cache `pub get` on its own layer. dart_db_connector is a path-dep,
 #    so the dart/pubspec.yaml + dart/pubspec.lock are also copied first.
-COPY dart/pubspec.* /build/dart/
-COPY bench/http/dart-native/pubspec.* /build/bench/http/dart-native/
+COPY dart/pubspec.* /build/packages/dart_db_connector/
+COPY benchmarks/http/dart-native/pubspec.* /build/benchmarks/http/dart-native/
 
 # Resolve dart_db_connector + the server's pubspec in two cache-friendly
 # layers. `dart pub get` against the path-dep needs lib/ structure to
@@ -36,36 +36,35 @@ COPY bench/http/dart-native/pubspec.* /build/bench/http/dart-native/
 # satisfy that without invalidating the cache when only sources change.
 # (Once we copy the real lib/ below, `dart pub get --offline` picks up
 #  the actual code without re-fetching anything.)
-RUN mkdir -p /build/dart/lib \
-    && echo "library dart_db_connector;" > /build/dart/lib/dart_db_connector.dart \
-    && cd /build/dart && dart pub get \
-    && cd /build/bench/http/dart-native && dart pub get
+RUN mkdir -p /build/packages/dart_db_connector/lib \
+    && echo "library dart_db_connector;" > /build/packages/dart_db_connector/lib/dart_db_connector.dart \
+    && cd /build/packages/dart_db_connector && dart pub get \
+    && cd /build/benchmarks/harness-dart/http/dart-native && dart pub get
 
 # 2) Real source. native first (CMake build), then dart/, then the server.
-COPY native /build/native
-COPY dart   /build/dart
-COPY bench/http/dart-native /build/bench/http/dart-native
+COPY packages/dart_db_connector /build/packages/dart_db_connector
+COPY benchmarks/http/dart-native /build/benchmarks/http/dart-native
 
 # Strip any host build artefacts that snuck in via the COPY (build dirs,
 # .dart_tool with absolute host paths).
-RUN rm -rf /build/native/c/build \
+RUN rm -rf /build/packages/dart_db_connector/native/c/build \
     && find /build -type d -name '.dart_tool' -exec rm -rf {} + 2>/dev/null || true
 
 # Refresh pub against the real sources (no network).
-RUN cd /build/dart && dart pub get --offline \
-    && cd /build/bench/http/dart-native && dart pub get --offline
+RUN cd /build/packages/dart_db_connector && dart pub get --offline \
+    && cd /build/benchmarks/harness-dart/http/dart-native && dart pub get --offline
 
 # 3) libnative_db.so (Linux, current arch). PG-only: toggle the MySQL/Mongo/
 # SQLite drivers OFF (added to CMakeLists in July F4.*; this PG HTTP image only
 # ships libpq-dev, so building them would FATAL on mysql_config/libmongoc).
-RUN cd /build/native/c \
+RUN cd /build/packages/dart_db_connector/native/c \
     && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
          -DBUILD_NATIVE_MYSQL=OFF -DBUILD_NATIVE_MONGO=OFF -DBUILD_NATIVE_SQLITE=OFF \
     && cmake --build build --target native_db
 
 # 4) AOT bundle (bin/server + lib/).
 RUN dart --version  # logged in build output for reproducibility
-RUN cd /build/bench/http/dart-native \
+RUN cd /build/benchmarks/harness-dart/http/dart-native \
     && dart build cli --target bin/server.dart -o /out
 
 # 5) Stage libnative_db.so. With `dart build cli` the exe lives in
@@ -86,9 +85,9 @@ RUN MACHINE="$(uname -m)" \
          *)       ARCH="$MACHINE" ;; \
        esac \
     && PLAT="linux-$ARCH" \
-    && cp /build/native/c/build/libnative_db.so /out/bundle/bin/ \
+    && cp /build/packages/dart_db_connector/native/c/build/libnative_db.so /out/bundle/bin/ \
     && mkdir -p "/out/bundle/lib/_native/$PLAT" \
-    && cp /build/native/c/build/libnative_db.so "/out/bundle/lib/_native/$PLAT/" \
+    && cp /build/packages/dart_db_connector/native/c/build/libnative_db.so "/out/bundle/lib/_native/$PLAT/" \
     && echo "$PLAT" > /out/.platform
 
 # ─────────── Stage 2: runtime ───────────

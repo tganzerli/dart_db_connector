@@ -1,12 +1,12 @@
-# bench/http/go-mysql — net/http (stdlib) + database/sql + go-sql-driver/mysql.
+# benchmarks/http/go-mysql — net/http (stdlib) + database/sql + go-sql-driver/mysql.
 #
 # Static binary in scratch — Go's standard recipe. ~10 MB final image.
 
 FROM golang:1.23-bookworm AS build
 WORKDIR /src
-COPY bench/http/go-mysql/go.mod bench/http/go-mysql/go.sum ./
+COPY benchmarks/http/go-mysql/go.mod benchmarks/http/go-mysql/go.sum ./
 RUN go mod download
-COPY bench/http/go-mysql/ ./
+COPY benchmarks/http/go-mysql/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server .
 
 FROM scratch

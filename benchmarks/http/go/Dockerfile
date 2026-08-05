@@ -1,12 +1,12 @@
-# bench/http/go — net/http (stdlib) + pgx v5.
+# benchmarks/http/go — net/http (stdlib) + pgx v5.
 #
 # Static binary in scratch — Go's standard recipe. ~10 MB final image.
 
 FROM golang:1.23-bookworm AS build
 WORKDIR /src
-COPY bench/http/go/go.mod ./
+COPY benchmarks/http/go/go.mod ./
 RUN go mod download
-COPY bench/http/go/ ./
+COPY benchmarks/http/go/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server .
 
 FROM scratch

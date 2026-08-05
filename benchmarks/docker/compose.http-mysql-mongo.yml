@@ -49,7 +49,7 @@ services:
 
   # -- MySQL servers ─────────────────────────────────────────────────
   http-dart-native-mysql:
-    build: { context: ../.., dockerfile: bench/http/dart-native-mysql/Dockerfile }
+    build: { context: ../.., dockerfile: benchmarks/http/dart-native-mysql/Dockerfile }
     container_name: ddc-1b-http-dart-native-mysql
     environment: { MYSQL_HOST: mysql, MYSQL_PORT: 3306, MYSQL_DB: teste, MYSQL_USER: bench, MYSQL_PASSWORD: "123", POOL_SIZE: "${POOL_SIZE:-64}" }
     cpus: "${HTTP_CPUS:-2}"
@@ -57,7 +57,7 @@ services:
     networks: [bench]
 
   http-dart-pkg-mysql:
-    build: { context: ../.., dockerfile: bench/http/dart-pkg-mysql/Dockerfile }
+    build: { context: ../.., dockerfile: benchmarks/http/dart-pkg-mysql/Dockerfile }
     container_name: ddc-1b-http-dart-pkg-mysql
     environment: { MYSQL_HOST: mysql, MYSQL_PORT: 3306, MYSQL_DB: teste, MYSQL_USER: bench, MYSQL_PASSWORD: "123", POOL_SIZE: "${POOL_SIZE:-64}" }
     cpus: "${HTTP_CPUS:-2}"
@@ -65,7 +65,7 @@ services:
     networks: [bench]
 
   http-go-mysql:
-    build: { context: ../.., dockerfile: bench/http/go-mysql/Dockerfile }
+    build: { context: ../.., dockerfile: benchmarks/http/go-mysql/Dockerfile }
     container_name: ddc-1b-http-go-mysql
     environment: { MYSQL_HOST: mysql, MYSQL_PORT: "3306", MYSQL_DB: teste, MYSQL_USER: bench, MYSQL_PASSWORD: "123", POOL_SIZE: "${POOL_SIZE:-64}" }
     cpus: "${HTTP_CPUS:-2}"
@@ -74,7 +74,7 @@ services:
 
   # -- MongoDB servers ─────────────────────────────────────────────────
   http-dart-native-mongo:
-    build: { context: ../.., dockerfile: bench/http/dart-native-mongo/Dockerfile }
+    build: { context: ../.., dockerfile: benchmarks/http/dart-native-mongo/Dockerfile }
     container_name: ddc-1b-http-dart-native-mongo
     environment: { MONGO_URI: "mongodb://mongo:27017", POOL_SIZE: "${POOL_SIZE:-64}" }
     cpus: "${HTTP_CPUS:-2}"
@@ -82,7 +82,7 @@ services:
     networks: [bench]
 
   http-dart-pkg-mongo:
-    build: { context: ../.., dockerfile: bench/http/dart-pkg-mongo/Dockerfile }
+    build: { context: ../.., dockerfile: benchmarks/http/dart-pkg-mongo/Dockerfile }
     container_name: ddc-1b-http-dart-pkg-mongo
     environment: { MONGO_URI: "mongodb://mongo:27017", POOL_SIZE: "${POOL_SIZE:-64}" }
     cpus: "${HTTP_CPUS:-2}"
@@ -90,7 +90,7 @@ services:
     networks: [bench]
 
   http-go-mongo:
-    build: { context: ../.., dockerfile: bench/http/go-mongo/Dockerfile }
+    build: { context: ../.., dockerfile: benchmarks/http/go-mongo/Dockerfile }
     container_name: ddc-1b-http-go-mongo
     environment: { MONGO_URI: "mongodb://mongo:27017", POOL_SIZE: "${POOL_SIZE:-64}" }
     cpus: "${HTTP_CPUS:-2}"

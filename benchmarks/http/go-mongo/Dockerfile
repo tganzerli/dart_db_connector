@@ -1,12 +1,12 @@
-# bench/http/go-mongo — net/http (stdlib) + MongoDB (official mongo-driver).
+# benchmarks/http/go-mongo — net/http (stdlib) + MongoDB (official mongo-driver).
 #
 # Static binary in scratch — Go's standard recipe. Small final image.
 
 FROM golang:1.23-bookworm AS build
 WORKDIR /src
-COPY bench/http/go-mongo/go.mod bench/http/go-mongo/go.sum ./
+COPY benchmarks/http/go-mongo/go.mod benchmarks/http/go-mongo/go.sum ./
 RUN go mod download
-COPY bench/http/go-mongo/ ./
+COPY benchmarks/http/go-mongo/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server .
 
 FROM scratch

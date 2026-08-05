@@ -10,10 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY bench/python/requirements.txt .
+COPY benchmarks/drivers/python/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY bench/python/ .
+COPY benchmarks/drivers/python/ .
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1

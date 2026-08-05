@@ -10,10 +10,10 @@ FROM golang:1.23 AS builder
 
 WORKDIR /src
 
-COPY bench/go/go.mod bench/go/go.sum ./
+COPY benchmarks/drivers/go/go.mod benchmarks/drivers/go/go.sum ./
 RUN go mod download
 
-COPY bench/go/ .
+COPY benchmarks/drivers/go/ .
 
 ENV CGO_ENABLED=0
 RUN go build -o /out/bench-go -ldflags="-s -w" .

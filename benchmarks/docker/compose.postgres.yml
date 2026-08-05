@@ -55,7 +55,7 @@ services:
   bench-dart:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.dart
+      dockerfile: benchmarks/docker/Dockerfile.dart
     container_name: ddc-bench-dart
     depends_on:
       postgres:
@@ -76,7 +76,7 @@ services:
   bench-go:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.go
+      dockerfile: benchmarks/docker/Dockerfile.go
     container_name: ddc-bench-go
     depends_on:
       postgres:
@@ -97,7 +97,7 @@ services:
   bench-node:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.node
+      dockerfile: benchmarks/docker/Dockerfile.node
     container_name: ddc-bench-node
     depends_on:
       postgres:
@@ -118,7 +118,7 @@ services:
   bench-python:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.python
+      dockerfile: benchmarks/docker/Dockerfile.python
     container_name: ddc-bench-python
     depends_on:
       postgres:
@@ -139,7 +139,7 @@ services:
   bench-rust:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.rust
+      dockerfile: benchmarks/docker/Dockerfile.rust
     container_name: ddc-bench-rust
     depends_on:
       postgres:
@@ -160,7 +160,7 @@ services:
   bench-java:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.java
+      dockerfile: benchmarks/docker/Dockerfile.java
     container_name: ddc-bench-java
     depends_on:
       postgres:
@@ -190,7 +190,7 @@ services:
   http-dart-native:
     build:
       context: ../..
-      dockerfile: bench/http/dart-native/Dockerfile
+      dockerfile: benchmarks/http/dart-native/Dockerfile
     container_name: ddc-bench-http-dart-native
     depends_on:
       postgres:
@@ -212,7 +212,7 @@ services:
   http-dart-native-raw:
     build:
       context: ../..
-      dockerfile: bench/http/dart-native-raw/Dockerfile
+      dockerfile: benchmarks/http/dart-native-raw/Dockerfile
     container_name: ddc-bench-http-dart-native-raw
     depends_on:
       postgres:
@@ -232,7 +232,7 @@ services:
   http-dart-pkg:
     build:
       context: ../..
-      dockerfile: bench/http/dart-pkg/Dockerfile
+      dockerfile: benchmarks/http/dart-pkg/Dockerfile
     container_name: ddc-bench-http-dart-pkg
     depends_on:
       postgres:
@@ -252,7 +252,7 @@ services:
   http-go:
     build:
       context: ../..
-      dockerfile: bench/http/go/Dockerfile
+      dockerfile: benchmarks/http/go/Dockerfile
     container_name: ddc-bench-http-go
     depends_on:
       postgres:
@@ -272,7 +272,7 @@ services:
   http-rust:
     build:
       context: ../..
-      dockerfile: bench/http/rust/Dockerfile
+      dockerfile: benchmarks/http/rust/Dockerfile
     container_name: ddc-bench-http-rust
     depends_on:
       postgres:
@@ -292,7 +292,7 @@ services:
   http-node:
     build:
       context: ../..
-      dockerfile: bench/http/node/Dockerfile
+      dockerfile: benchmarks/http/node/Dockerfile
     container_name: ddc-bench-http-node
     depends_on:
       postgres:
@@ -312,7 +312,7 @@ services:
   http-python:
     build:
       context: ../..
-      dockerfile: bench/http/python/Dockerfile
+      dockerfile: benchmarks/http/python/Dockerfile
     container_name: ddc-bench-http-python
     depends_on:
       postgres:
@@ -332,7 +332,7 @@ services:
   http-java:
     build:
       context: ../..
-      dockerfile: bench/http/java/Dockerfile
+      dockerfile: benchmarks/http/java/Dockerfile
     container_name: ddc-bench-http-java
     depends_on:
       postgres:
@@ -372,7 +372,7 @@ services:
       dockerfile: Dockerfile.bench-profiler
     container_name: ddc-bench-profiler
     # Profiler needs perf_event_open; granted via runtime caps (see
-    # docker/bench/run-phase3-overnight.sh — the profiler is started
+    # benchmarks/docker/run-phase3-overnight.sh — the profiler is started
     # via `docker run` with --cap-add, not via compose).
     profiles: ["never"]   # never started by `docker compose up`
     cpus: "${PROFILER_CPUS:-1}"

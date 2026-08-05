@@ -1,4 +1,4 @@
-# bench/http/node — fastify + postgres.js.
+# benchmarks/http/node — fastify + postgres.js.
 #
 # Adjustments from https://hub.docker.com/_/node:
 #   * `npm ci` (deterministic install from package-lock.json) instead
@@ -12,10 +12,10 @@ FROM node:22-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /app
 
-COPY bench/http/node/package.json bench/http/node/package-lock.json ./
+COPY benchmarks/http/node/package.json benchmarks/http/node/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-COPY bench/http/node/server.js ./
+COPY benchmarks/http/node/server.js ./
 
 EXPOSE 8080
 CMD ["node", "--max-old-space-size=2048", "server.js"]

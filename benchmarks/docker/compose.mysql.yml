@@ -27,7 +27,7 @@ services:
   bench-dart-mysql:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.dart-mysql
+      dockerfile: benchmarks/docker/Dockerfile.dart-mysql
     depends_on:
       mysql:
         condition: service_healthy
@@ -48,7 +48,7 @@ services:
   bench-go-mysql:
     build:
       context: ../..
-      dockerfile: docker/bench/Dockerfile.go-mysql
+      dockerfile: benchmarks/docker/Dockerfile.go-mysql
     depends_on:
       mysql:
         condition: service_healthy

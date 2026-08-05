@@ -1,4 +1,4 @@
-# bench/http/java — Spring Boot 3 + embedded Tomcat + HikariCP + pgjdbc.
+# benchmarks/http/java — Spring Boot 3 + embedded Tomcat + HikariCP + pgjdbc.
 
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Cache Maven deps on its own layer.
-COPY bench/http/java/pom.xml ./
+COPY benchmarks/http/java/pom.xml ./
 RUN mvn -B -q dependency:go-offline || true
 
-COPY bench/http/java/src ./src
+COPY benchmarks/http/java/src ./src
 RUN mvn -B -q clean package -DskipTests
 RUN cp /src/target/bench-http-java.jar /out.jar
 

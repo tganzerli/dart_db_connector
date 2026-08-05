@@ -5,9 +5,9 @@
 FROM golang:1.22-bookworm AS builder
 
 WORKDIR /build
-COPY bench/go-mongo/go.mod ./
+COPY benchmarks/drivers/go-mongo/go.mod ./
 RUN go mod download 2>/dev/null || true
-COPY bench/go-mongo/ ./
+COPY benchmarks/drivers/go-mongo/ ./
 RUN go mod tidy
 RUN CGO_ENABLED=0 go build -o /out/bench-go-mongo .
 

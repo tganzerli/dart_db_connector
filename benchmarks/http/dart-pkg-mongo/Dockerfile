@@ -1,4 +1,4 @@
-# bench/http/dart-pkg-mongo — Shelf + mongo_dart 0.10.9 (pub.dev).
+# benchmarks/http/dart-pkg-mongo — Shelf + mongo_dart 0.10.9 (pub.dev).
 #
 # Pure-Dart driver — no native lib, no C toolchain, no mongoc. Uses the
 # Dart team's canonical AOT recipe from https://hub.docker.com/_/dart:
@@ -17,12 +17,12 @@ WORKDIR /app
 
 # Cache `pub get` on its own layer — `pubspec.lock` is committed so the
 # offline run is reproducible.
-COPY bench/http/dart-pkg-mongo/pubspec.* ./
+COPY benchmarks/http/dart-pkg-mongo/pubspec.* ./
 RUN dart pub get
 
 # Now bring in the rest of the source; rerun pub get --offline to
 # refresh anything that might have changed locally but not in pubspec.
-COPY bench/http/dart-pkg-mongo/ ./
+COPY benchmarks/http/dart-pkg-mongo/ ./
 RUN dart pub get --offline
 
 # Structured AOT bundle: build/cli/<platform>/bundle/{bin/server, lib/}.

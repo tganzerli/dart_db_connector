@@ -9,12 +9,12 @@ WORKDIR /src
 
 # Pre-cache deps via dummy build (so cargo registry pulls happen in
 # their own layer, surviving src/* edits).
-COPY bench/rust/Cargo.toml .
+COPY benchmarks/drivers/rust/Cargo.toml .
 RUN mkdir -p src && echo 'fn main(){}' > src/main.rs \
     && cargo build --release \
     && rm -rf src
 
-COPY bench/rust/src ./src
+COPY benchmarks/drivers/rust/src ./src
 
 # Force rebuild of our crate (touch).
 RUN touch src/main.rs && cargo build --release

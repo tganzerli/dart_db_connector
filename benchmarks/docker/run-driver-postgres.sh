@@ -68,7 +68,7 @@ stem() {
 wait_postgres_healthy() {
   local timeout=60 elapsed=0
   while [ $elapsed -lt $timeout ]; do
-    if docker compose ps postgres --format json 2>/dev/null | grep -q '"Health":"healthy"'; then
+    if docker compose -f compose.postgres.yml ps postgres --format json 2>/dev/null | grep -q '"Health":"healthy"'; then
       return 0
     fi
     sleep 1
@@ -79,7 +79,7 @@ wait_postgres_healthy() {
 }
 
 seed_db() {
-  docker compose run --rm --entrypoint /bin/bash bench-dart \
+  docker compose -f compose.postgres.yml run --rm --entrypoint /bin/bash bench-dart \
     -c "PGPASSWORD=123 psql -h postgres -U postgres -d teste -q -f /app/tpcc_schema.sql >/dev/null && /app/bench_seed" \
     >/dev/null
 }
@@ -88,7 +88,7 @@ seed_db() {
 # tables. Appended to the session .log so the artifact is self-documenting.
 persistence_check() {
   local logfile="$1"
-  docker compose run --rm --entrypoint /bin/bash bench-dart \
+  docker compose -f compose.postgres.yml run --rm --entrypoint /bin/bash bench-dart \
     -c "PGPASSWORD=123 psql -h postgres -U postgres -d teste -c \"SELECT count(*) AS orders FROM orders; SELECT count(*) AS new_order FROM new_order; SELECT count(*) AS order_line FROM order_line;\"" \
     2>&1 | tee -a "$logfile"
 }
@@ -99,12 +99,12 @@ run_dart() {
   local topo="$1" out="$2"
   rm -f "$OUTDIR/$out.csv" "$OUTDIR/$out.log"
   if [ "$topo" = "1x1" ]; then
-    docker compose run --rm -e BENCH_OUTPUT_DIR=/outputs \
+    docker compose -f compose.postgres.yml run --rm -e BENCH_OUTPUT_DIR=/outputs \
       --entrypoint /app/bench_tpcc_single_isolate bench-dart \
       --driver native --conns 1 --tx-count "$TX_COUNT" --reps "$REPS" \
       --out-base "$out" 2>&1 | tee "$OUTDIR/$out.log"
   else
-    docker compose run --rm -e BENCH_OUTPUT_DIR=/outputs \
+    docker compose -f compose.postgres.yml run --rm -e BENCH_OUTPUT_DIR=/outputs \
       --entrypoint /app/bench_tpcc_multi bench-dart \
       --driver native --workers 4 --conns-per-worker 4 \
       --tx-count "$TX_COUNT" --reps "$REPS" \
@@ -118,12 +118,12 @@ run_dart_pkg() {
   local topo="$1" out="$2"
   rm -f "$OUTDIR/$out.csv" "$OUTDIR/$out.log"
   if [ "$topo" = "1x1" ]; then
-    docker compose run --rm -e BENCH_OUTPUT_DIR=/outputs \
+    docker compose -f compose.postgres.yml run --rm -e BENCH_OUTPUT_DIR=/outputs \
       --entrypoint /app/bench_tpcc_single_isolate bench-dart \
       --driver postgres --conns 1 --tx-count "$TX_COUNT" --reps "$REPS" \
       --out-base "$out" 2>&1 | tee "$OUTDIR/$out.log"
   else
-    docker compose run --rm -e BENCH_OUTPUT_DIR=/outputs \
+    docker compose -f compose.postgres.yml run --rm -e BENCH_OUTPUT_DIR=/outputs \
       --entrypoint /app/bench_tpcc_multi bench-dart \
       --driver postgres --workers 4 --conns-per-worker 4 \
       --tx-count "$TX_COUNT" --reps "$REPS" \
@@ -141,7 +141,7 @@ run_other() {
     4x4) workers=4; cpw=4 ;;
   esac
   rm -f "$OUTDIR/$out.csv" "$OUTDIR/$out.log"
-  docker compose run --rm "$service" \
+  docker compose -f compose.postgres.yml run --rm "$service" \
     --workers "$workers" --conns-per-worker "$cpw" \
     --tx-count "$TX_COUNT" --reps "$REPS" \
     --csv "/outputs/$out.csv" "$@" 2>&1 | tee "$OUTDIR/$out.log"
@@ -156,8 +156,8 @@ isolated_run() {
   echo "  $(date -u +%H:%M:%S) UTC"
   echo "============================================="
 
-  docker compose down -v 2>/dev/null || true
-  docker compose up -d postgres >/dev/null
+  docker compose -f compose.postgres.yml down -v 2>/dev/null || true
+  docker compose -f compose.postgres.yml up -d postgres >/dev/null
   wait_postgres_healthy
   seed_db
 
@@ -171,14 +171,14 @@ isolated_run() {
     java)     run_other bench-java "$topo" "$out" --warmup 500 ;;
   esac
 
-  docker compose down -v 2>/dev/null || true
+  docker compose -f compose.postgres.yml down -v 2>/dev/null || true
   echo "[isolated] cool-down 10s ..."
   sleep 10
 }
 
 # Pre-flight: ensure images exist (no rebuild during the timed run)
 echo "[setup] verifying images are built ..."
-docker compose build bench-dart bench-go bench-node bench-python bench-rust bench-java 2>&1 | tail -3
+docker compose -f compose.postgres.yml build bench-dart bench-go bench-node bench-python bench-rust bench-java 2>&1 | tail -3
 
 # Clean ONLY the robust CSVs/logs for the drivers being run (preserve other work)
 for driver in "${DRIVERS[@]}"; do

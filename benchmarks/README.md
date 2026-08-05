@@ -10,12 +10,14 @@ aggregators that turn raw runs into confidence intervals.
 ## Layout
 
 ```
-drivers/    Driver-level workloads (TPC-C, YCSB) per language: Go, Java, Node,
-            Python, Rust, and both Dart drivers.
-http/       HTTP servers implementing the same endpoints across 14 stacks,
-            for end-to-end measurement.
-docker/     Compose topologies, per-language Dockerfiles, run orchestration,
-            and the statistical aggregators.
+harness-dart/  The Dart benchmark harness: TPC-C and YCSB runners for this
+               connector and for the pub.dev drivers, plus SQL fixtures and seeds.
+drivers/       Driver-level workloads in the other languages: Go, Java, Node,
+               Python, Rust.
+http/          HTTP servers implementing the same endpoints across 14 stacks,
+               for end-to-end measurement.
+docker/        Compose topologies, per-language Dockerfiles, run orchestration,
+               and the statistical aggregators.
 ```
 
 ## Requirements
@@ -73,8 +75,11 @@ All commands run from `benchmarks/docker`.
 # Build once
 docker compose -f compose.postgres.yml build
 
-# Smoke run (minutes)
-SESSIONS_PER_COMBO=1 REPS=1 TX_COUNT=200 bash run-driver-postgres.sh
+# Smoke run: two drivers, one topology, a few minutes. Start here to confirm
+# the topology works before committing to a full run.
+SESSIONS_PER_COMBO=1 REPS=1 TX_COUNT=200 \
+  DRIVERS_OVERRIDE="dart go" TOPOLOGIES_OVERRIDE="1x1" \
+  bash run-driver-postgres.sh
 
 # Full run (hours) — 7 drivers x 2 topologies x 5 sessions = 70 isolated sessions
 SESSIONS_PER_COMBO=5 REPS=5 TX_COUNT=10000 bash run-driver-postgres.sh

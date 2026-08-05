@@ -1,10 +1,10 @@
-# bench/http/rust — axum + tokio-postgres + deadpool.
+# benchmarks/http/rust — axum + tokio-postgres + deadpool.
 
 FROM rust:1.85-bookworm AS build
 WORKDIR /src
-COPY bench/http/rust/Cargo.toml ./
+COPY benchmarks/http/rust/Cargo.toml ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo fetch
-COPY bench/http/rust/src ./src
+COPY benchmarks/http/rust/src ./src
 RUN cargo build --release --locked || cargo build --release
 RUN cp /src/target/release/bench_http_rust /out
 

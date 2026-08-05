@@ -7,10 +7,10 @@ FROM maven:3.9-eclipse-temurin-21 AS builder
 
 WORKDIR /src
 
-COPY bench/java/pom.xml .
+COPY benchmarks/drivers/java/pom.xml .
 RUN mvn -B -q dependency:go-offline
 
-COPY bench/java/src ./src
+COPY benchmarks/drivers/java/src ./src
 RUN mvn -B -q package -DskipTests
 
 FROM eclipse-temurin:21-jre-alpine
