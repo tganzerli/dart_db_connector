@@ -1,0 +1,62 @@
+# Compose for the MongoDB cross-language YCSB bench.
+# Driven by run-driver-mongo.sh under strict isolation.
+
+services:
+  mongo:
+    image: mongo:8
+    container_name: ddc-bench-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: "123"
+    cpus: "${MONGO_CPUS:-2}"
+    mem_limit: ${MONGO_MEM:-4g}
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u root -p 123 --eval 'db.adminCommand({ping:1})' || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    networks:
+      - benchnet
+
+  bench-dart-mongo:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.dart-mongo
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      MONGO_USER: root
+      MONGO_PASSWORD: "123"
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - benchnet
+    volumes:
+      - ./outputs:/outputs
+
+  bench-go-mongo:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.go-mongo
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      MONGO_USER: root
+      MONGO_PASSWORD: "123"
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - benchnet
+    volumes:
+      - ./outputs:/outputs
+
+networks:
+  benchnet:
+    driver: bridge

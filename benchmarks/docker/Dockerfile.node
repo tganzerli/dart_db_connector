@@ -1,0 +1,26 @@
+# Multi-stage build para o bench harness Node (postgres.js).
+#
+# Stage 1 (builder, node:20-alpine): npm ci com lockfile.
+# Stage 2 (runtime, node:20-alpine): copia node_modules + sources.
+# Imagem final ~80-120MB (node + deps).
+
+FROM node:20-alpine AS builder
+
+WORKDIR /src
+
+COPY bench/node/package.json bench/node/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+COPY bench/node/ .
+
+FROM node:20-alpine
+
+RUN apk add --no-cache postgresql16-client
+
+WORKDIR /app
+COPY --from=builder /src /app
+
+VOLUME ["/outputs"]
+
+ENTRYPOINT ["node", "/app/index.js"]
+CMD ["--workers", "1", "--conns-per-worker", "1", "--tx-count", "5000", "--reps", "3"]

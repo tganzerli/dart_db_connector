@@ -1,0 +1,71 @@
+# Compose for the MySQL cross-language TPC-C bench.
+# Separate from the Postgres compose.postgres.yml to keep the two harnesses
+# independent. Driven by run-driver-mysql.sh under strict isolation.
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: ddc-bench-mysql
+    # native_password ON so pure-Dart mysql_client can auth over plaintext.
+    command: ["--mysql-native-password=ON"]
+    environment:
+      MYSQL_ROOT_PASSWORD: "123"
+      MYSQL_DATABASE: teste
+    cpus: "${MYSQL_CPUS:-2}"
+    mem_limit: ${MYSQL_MEM:-4g}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p123 --silent"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    volumes:
+      - ./mysql-init.sql:/docker-entrypoint-initdb.d/00-bench-user.sql:ro
+    networks:
+      - benchnet
+
+  bench-dart-mysql:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.dart-mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: teste
+      MYSQL_USER: bench
+      MYSQL_PASSWORD: "123"
+      TPCC_WAREHOUSES: ${TPCC_WAREHOUSES:-3}
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - benchnet
+    volumes:
+      - ./outputs:/outputs
+
+  bench-go-mysql:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.go-mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: teste
+      MYSQL_USER: bench
+      MYSQL_PASSWORD: "123"
+      TPCC_WAREHOUSES: ${TPCC_WAREHOUSES:-3}
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - benchnet
+    volumes:
+      - ./outputs:/outputs
+
+networks:
+  benchnet:
+    driver: bridge

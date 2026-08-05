@@ -1,0 +1,14 @@
+name: bench_http_dart_native_mysql
+description: >
+  HTTP MySQL/MongoDB benchmark HTTP server (Shelf) backed by dart_db_connector MySQL
+  (FFI over libmysqlclient) — the developed driver.
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  dart_db_connector:
+    path: ../../../packages/dart_db_connector

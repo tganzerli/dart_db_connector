@@ -1,0 +1,30 @@
+# Dart
+.dart_tool/
+.packages
+pubspec.lock
+doc/api/
+coverage/
+
+# Native build output
+build/
+build-*/
+*.o
+cmake-build-*/
+
+# Language toolchains used by the benchmark harnesses
+node_modules/
+target/
+__pycache__/
+*.pyc
+.gradle/
+
+# Benchmark run output (raw measurements are not versioned; see benchmarks/README.md)
+benchmarks/**/output/
+benchmarks/**/outputs/
+benchmarks/**/results/
+*.csv.gz
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

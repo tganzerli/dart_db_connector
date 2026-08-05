@@ -1,0 +1,9 @@
+-I./include
+-I./include/dart
+-I/opt/homebrew/opt/libpq/include
+-I/usr/local/opt/libpq/include
+-I/usr/local/include
+-I/usr/include/postgresql
+-std=c11
+-Wall
+-Wextra

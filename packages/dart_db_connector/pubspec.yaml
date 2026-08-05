@@ -1,0 +1,26 @@
+name: dart_db_connector
+description: >
+  High-performance multi-database connector for Dart backends. Combines dart:ffi
+  with native drivers, a native thread-per-connection pool, and Dart Native Ports
+  for non-blocking async I/O. Supports PostgreSQL, MySQL, MongoDB and SQLite.
+version: 0.1.0
+
+repository: https://github.com/tganzerli/dart_db_connector
+issue_tracker: https://github.com/tganzerli/dart_db_connector/issues
+
+topics:
+  - database
+  - postgresql
+  - mysql
+  - mongodb
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  ffi: ^2.1.0
+  meta: ^1.15.0
+
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.25.0

@@ -1,0 +1,13 @@
+{
+  "name": "bench_http_node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "postgres": "^3.4.4"
+  }
+}

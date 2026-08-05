@@ -1,0 +1,13 @@
+name: bench_http_dart_native_raw
+description: >
+  Raw-server benchmark HTTP server — raw dart:io HttpServer (no Shelf) backed by
+  dart_db_connector (FFI over libpq). Isolates the framework cost vs the
+  Shelf sibling (bench/http/dart-native).
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  dart_db_connector:
+    path: ../../../packages/dart_db_connector

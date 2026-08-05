@@ -1,0 +1,386 @@
+name: ddc-bench
+
+# Benchmark harness with resource limits parameterised through env vars.
+#
+# A) Driver-level TPC-C services (bench-dart, bench-go, ...) — limits are
+#    hard-coded at 2 CPU / 4 GB. Do not parameterise them: the published
+#    cross-language TPC-C numbers were measured under exactly this config,
+#    and changing it would break direct comparability.
+#
+# B) HTTP services (postgres, http-*, bench-loader, bench-profiler) — limits
+#    come from env vars, defaulting to the same 2 CPU / 4 GB. Raise them with
+#    HTTP_CPUS / POSTGRES_CPUS to measure how the ranking responds to a wider
+#    CPU envelope.
+#
+# All services share one bridge network.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ddc-bench-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+    # `shared_preload_libraries=pg_stat_statements` is required to observe,
+    # server-side, the difference between drivers that use the simple query
+    # protocol and those that use the extended one.
+    command: >-
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.max=10000
+      -c pg_stat_statements.track=all
+    # Dual config: 2 CPU by default; override to 4 CPU to measure the
+    # ranking under a wider CPU envelope.
+    cpus: "${POSTGRES_CPUS:-2}"
+    mem_limit: ${POSTGRES_MEM:-4g}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d teste"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks:
+      - bench
+    # Volatile Postgres data: the benchmark does not preserve state between runs.
+    # tmpfs evita escrita em disk overhead.
+    tmpfs:
+      - /var/lib/postgresql/data:rw
+
+  # ── Driver-level TPC-C services (hard-coded 2 CPU / 4 GB) ────────────
+  #
+  # Limits are FROZEN at 2 CPU / 4 GB. Do not parameterise: the published
+  # CSVs under outputs/ were measured with this config, and the
+  # l4-diagnosis cross-input depende deles.
+
+  bench-dart:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.dart
+    container_name: ddc-bench-dart
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - bench
+    volumes:
+      - ./outputs:/outputs
+
+  bench-go:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.go
+    container_name: ddc-bench-go
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - bench
+    volumes:
+      - ./outputs:/outputs
+
+  bench-node:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.node
+    container_name: ddc-bench-node
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - bench
+    volumes:
+      - ./outputs:/outputs
+
+  bench-python:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.python
+    container_name: ddc-bench-python
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - bench
+    volumes:
+      - ./outputs:/outputs
+
+  bench-rust:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.rust
+    container_name: ddc-bench-rust
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - bench
+    volumes:
+      - ./outputs:/outputs
+
+  bench-java:
+    build:
+      context: ../..
+      dockerfile: docker/bench/Dockerfile.java
+    container_name: ddc-bench-java
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+    cpus: "2"
+    mem_limit: 4g
+    networks:
+      - bench
+    volumes:
+      - ./outputs:/outputs
+
+  # ── Phase 3 — HTTP cross-stack services (parametrizados) ─────────────
+  #
+  # Limits via env (HTTP_CPUS / HTTP_MEM), defaulting to 2 CPU / 4 GB to match
+  # the driver-level services. Raise CPU alone for the wider-envelope run:
+  # an OLTP workload against a tmpfs-backed Postgres does not need more RAM,
+  # and the Docker VM on a 16 GB host caps total memory anyway.
+  #
+  # POOL_SIZE env var é o topology switch (pool=1 ou pool=64).
+
+  http-dart-native:
+    build:
+      context: ../..
+      dockerfile: bench/http/dart-native/Dockerfile
+    container_name: ddc-bench-http-dart-native
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POOL_SIZE: ${POOL_SIZE:-64}
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks:
+      - bench
+
+  # Raw dart:io HttpServer (no Shelf), same driver, pool and queries as
+  # http-dart-native. Isolates the HTTP framework cost from the driver cost.
+  http-dart-native-raw:
+    build:
+      context: ../..
+      dockerfile: bench/http/dart-native-raw/Dockerfile
+    container_name: ddc-bench-http-dart-native-raw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POOL_SIZE: ${POOL_SIZE:-64}
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks:
+      - bench
+
+  http-dart-pkg:
+    build:
+      context: ../..
+      dockerfile: bench/http/dart-pkg/Dockerfile
+    container_name: ddc-bench-http-dart-pkg
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POOL_SIZE: ${POOL_SIZE:-64}
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks:
+      - bench
+
+  http-go:
+    build:
+      context: ../..
+      dockerfile: bench/http/go/Dockerfile
+    container_name: ddc-bench-http-go
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POOL_SIZE: ${POOL_SIZE:-64}
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks:
+      - bench
+
+  http-rust:
+    build:
+      context: ../..
+      dockerfile: bench/http/rust/Dockerfile
+    container_name: ddc-bench-http-rust
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POOL_SIZE: ${POOL_SIZE:-64}
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks:
+      - bench
+
+  http-node:
+    build:
+      context: ../..
+      dockerfile: bench/http/node/Dockerfile
+    container_name: ddc-bench-http-node
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POOL_SIZE: ${POOL_SIZE:-64}
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks:
+      - bench
+
+  http-python:
+    build:
+      context: ../..
+      dockerfile: bench/http/python/Dockerfile
+    container_name: ddc-bench-http-python
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POOL_SIZE: ${POOL_SIZE:-64}
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks:
+      - bench
+
+  http-java:
+    build:
+      context: ../..
+      dockerfile: bench/http/java/Dockerfile
+    container_name: ddc-bench-http-java
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-teste}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123}
+      POOL_SIZE: ${POOL_SIZE:-64}
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks:
+      - bench
+
+  bench-loader:
+    build:
+      context: .
+      dockerfile: Dockerfile.bench-loader
+    container_name: ddc-bench-loader
+    # Loader: defaults 2 CPU / 2 GB (Opção D — nunca gargalo entre
+    # configs 2cpu e 4cpu).
+    volumes:
+      # Mount Docker socket so capture-docker-stats.sh can poll the
+      # target container without privileged access on the loader.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./outputs:/outputs
+    cpus: "${LOADER_CPUS:-2}"
+    mem_limit: ${LOADER_MEM:-2g}
+    networks:
+      - bench
+
+  bench-profiler:
+    build:
+      context: .
+      dockerfile: Dockerfile.bench-profiler
+    container_name: ddc-bench-profiler
+    # Profiler needs perf_event_open; granted via runtime caps (see
+    # docker/bench/run-phase3-overnight.sh — the profiler is started
+    # via `docker run` with --cap-add, not via compose).
+    profiles: ["never"]   # never started by `docker compose up`
+    cpus: "${PROFILER_CPUS:-1}"
+    mem_limit: ${PROFILER_MEM:-1g}
+    networks:
+      - bench
+
+networks:
+  bench:
+    driver: bridge
+    name: ddc-bench-net

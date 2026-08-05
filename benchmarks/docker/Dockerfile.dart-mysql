@@ -1,0 +1,82 @@
+# Multi-stage build for the developed MySQL driver bench.
+# Mirrors Dockerfile.dart but builds libnative_mysql.so (over the MySQL
+# client) and AOT-compiles the MySQL bench runner.
+#
+# Stage 1: build libnative_mysql.so + AOT bench_tpcc_mysql.
+# Stage 2: debian-slim + MySQL client shared lib + mysql CLI (for schema).
+
+# ─────────── Stage 1: builder ───────────
+FROM dart:stable AS builder
+
+# C toolchain + cmake. Both client dev packages: libpq-dev is only needed so
+# CMake's find_package(PostgreSQL) succeeds during configure — we build ONLY
+# the native_mysql target. default-libmysqlclient-dev provides mysql.h +
+# mysql_config + the client shared lib.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        pkg-config \
+        libpq-dev \
+        default-libmysqlclient-dev \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+COPY native /build/native
+COPY dart /build/dart
+COPY benchmarks /build/benchmarks
+
+RUN rm -rf /build/native/c/build \
+    && find /build -type d -name '.dart_tool' -exec rm -rf {} + 2>/dev/null || true \
+    && find /build -type d -name 'build' -path '*/native/*' -exec rm -rf {} + 2>/dev/null || true
+
+# Build ONLY libnative_mysql.so for Linux.
+RUN cd /build/native/c \
+    && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
+         -DBUILD_NATIVE_MONGO=OFF -DBUILD_NATIVE_SQLITE=OFF \
+    && cmake --build build --target native_mysql
+
+RUN cd /build/dart && dart pub get
+RUN cd /build/benchmarks && dart pub get
+
+RUN mkdir -p /out \
+    && cd /build/benchmarks \
+    && dart compile exe scripts/tpcc/bench_tpcc_mysql.dart -o /out/bench_tpcc_mysql
+
+# Place the .so at the resolver's pub-cache-mirror path so the AOT exe in
+# /app finds it via lib/_native/<os>-<arch>/ (native_lib_loader path #2).
+RUN MACHINE="$(uname -m)" \
+    && case "$MACHINE" in \
+         aarch64) ARCH=arm64 ;; \
+         x86_64)  ARCH=x64 ;; \
+         *)       ARCH="$MACHINE" ;; \
+       esac \
+    && PLAT="linux-$ARCH" \
+    && mkdir -p "/out/lib/_native/$PLAT" \
+    && cp /build/native/c/build/libnative_mysql.so "/out/lib/_native/$PLAT/" \
+    && echo "[dockerfile] native lib at /out/lib/_native/$PLAT/libnative_mysql.so"
+
+RUN cp /build/benchmarks/fixtures/tpcc_schema_mysql.sql /out/
+
+# ─────────── Stage 2: runtime ───────────
+FROM debian:stable-slim
+
+# libmariadb3 = the client shared lib linked above (Debian's default MySQL
+# client is MariaDB Connector/C, API-compatible). default-mysql-client gives
+# the `mariadb`/`mysql` CLI used by the runner to apply the schema.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libmariadb3 \
+        default-mysql-client \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /out/ /app/
+
+ENV LD_LIBRARY_PATH=/app:${LD_LIBRARY_PATH}
+
+VOLUME ["/outputs"]
+
+ENTRYPOINT ["/app/bench_tpcc_mysql"]
+CMD ["--driver", "native-mysql", "--conns", "1", "--tx-count", "5000", "--reps", "3"]

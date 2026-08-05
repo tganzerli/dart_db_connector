@@ -1,0 +1,15 @@
+name: dart_pkg_mongo_http
+description: >
+  Phase 3 HTTP server (Shelf) backed by the canonical `mongo_dart` 0.10.9
+  pub.dev package (pure-Dart MongoDB wire protocol implementation).
+  Counterpart of bench_http_dart_native_mongo; used for the intra-Dart
+  MongoDB comparison.
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  mongo_dart: 0.10.9

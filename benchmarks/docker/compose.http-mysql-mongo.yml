@@ -1,0 +1,111 @@
+name: ddc-bench-1b
+
+# HTTP end-to-end benchmark against MySQL and MongoDB. Uses a Compose project
+# and network SEPARATE from compose.postgres.yml so the two suites cannot
+# interfere. Two databases + 6 servers + loader. Limits via env
+# (DB_CPUS/HTTP_CPUS/POOL_SIZE), same pattern as compose.postgres.yml.
+# Databases run on tmpfs, since strict isolation tears the volume down between
+# sessions anyway. Auth and version settings below are required so that:
+#   mysql:8.4 + --mysql-native-password=ON + --authentication-policy=... para o
+#   mysql_client pure-Dart autenticar sobre plaintext.
+
+services:
+  # ── Bancos ───────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.4
+    container_name: ddc-1b-mysql
+    command:
+      - "--mysql-native-password=ON"
+      - "--authentication-policy=mysql_native_password"
+    environment:
+      MYSQL_ROOT_PASSWORD: "123"
+      MYSQL_DATABASE: teste
+      MYSQL_USER: bench
+      MYSQL_PASSWORD: "123"
+    cpus: "${DB_CPUS:-2}"
+    mem_limit: ${DB_MEM:-4g}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -uroot -p123 --silent"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    tmpfs:
+      - /var/lib/mysql:rw
+    networks: [bench]
+
+  mongo:
+    image: mongo:7
+    container_name: ddc-1b-mongo
+    cpus: "${DB_CPUS:-2}"
+    mem_limit: ${DB_MEM:-4g}
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep -q 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    tmpfs:
+      - /data/db:rw
+    networks: [bench]
+
+  # -- MySQL servers ─────────────────────────────────────────────────
+  http-dart-native-mysql:
+    build: { context: ../.., dockerfile: bench/http/dart-native-mysql/Dockerfile }
+    container_name: ddc-1b-http-dart-native-mysql
+    environment: { MYSQL_HOST: mysql, MYSQL_PORT: 3306, MYSQL_DB: teste, MYSQL_USER: bench, MYSQL_PASSWORD: "123", POOL_SIZE: "${POOL_SIZE:-64}" }
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks: [bench]
+
+  http-dart-pkg-mysql:
+    build: { context: ../.., dockerfile: bench/http/dart-pkg-mysql/Dockerfile }
+    container_name: ddc-1b-http-dart-pkg-mysql
+    environment: { MYSQL_HOST: mysql, MYSQL_PORT: 3306, MYSQL_DB: teste, MYSQL_USER: bench, MYSQL_PASSWORD: "123", POOL_SIZE: "${POOL_SIZE:-64}" }
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks: [bench]
+
+  http-go-mysql:
+    build: { context: ../.., dockerfile: bench/http/go-mysql/Dockerfile }
+    container_name: ddc-1b-http-go-mysql
+    environment: { MYSQL_HOST: mysql, MYSQL_PORT: "3306", MYSQL_DB: teste, MYSQL_USER: bench, MYSQL_PASSWORD: "123", POOL_SIZE: "${POOL_SIZE:-64}" }
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks: [bench]
+
+  # -- MongoDB servers ─────────────────────────────────────────────────
+  http-dart-native-mongo:
+    build: { context: ../.., dockerfile: bench/http/dart-native-mongo/Dockerfile }
+    container_name: ddc-1b-http-dart-native-mongo
+    environment: { MONGO_URI: "mongodb://mongo:27017", POOL_SIZE: "${POOL_SIZE:-64}" }
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks: [bench]
+
+  http-dart-pkg-mongo:
+    build: { context: ../.., dockerfile: bench/http/dart-pkg-mongo/Dockerfile }
+    container_name: ddc-1b-http-dart-pkg-mongo
+    environment: { MONGO_URI: "mongodb://mongo:27017", POOL_SIZE: "${POOL_SIZE:-64}" }
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks: [bench]
+
+  http-go-mongo:
+    build: { context: ../.., dockerfile: bench/http/go-mongo/Dockerfile }
+    container_name: ddc-1b-http-go-mongo
+    environment: { MONGO_URI: "mongodb://mongo:27017", POOL_SIZE: "${POOL_SIZE:-64}" }
+    cpus: "${HTTP_CPUS:-2}"
+    mem_limit: ${HTTP_MEM:-4g}
+    networks: [bench]
+
+  # ── Loader (wrk) — mesmo do 1a ───────────────────────────────────────
+  bench-loader:
+    build: { context: ., dockerfile: Dockerfile.bench-loader }
+    container_name: ddc-1b-loader
+    cpus: "${LOADER_CPUS:-2}"
+    mem_limit: ${LOADER_MEM:-2g}
+    networks: [bench]
+
+networks:
+  bench:
+    driver: bridge
+    name: ddc-bench-1b-net

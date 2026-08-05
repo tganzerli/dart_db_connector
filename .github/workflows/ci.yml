@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: packages/dart_db_connector
+
+jobs:
+  analyze:
+    name: analyze and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      - run: dart analyze --fatal-infos
+      - run: dart format --output none --set-exit-if-changed .
+
+  build-and-test:
+    name: build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install client libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential \
+            libpq-dev libmysqlclient-dev libmongoc-dev libsqlite3-dev
+
+      - name: Install client libraries (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake libpq mysql-client mongo-c-driver
+
+      - name: Build native libraries
+        run: |
+          cmake -S native/c -B native/c/build
+          cmake --build native/c/build --parallel
+
+      - name: Verify the ABI loads
+        # The resolver walks its candidate paths and each driver asserts its ABI
+        # version against the C library. A mismatch between the Dart constants and
+        # the headers surfaces here rather than as memory corruption at runtime.
+        run: |
+          ls -la native/c/build
+          dart pub get
+          dart test test/native_lib_resolver_test.dart
+
+      - name: Run tests that need no database
+        # The integration suites need live PostgreSQL/MySQL/MongoDB instances and
+        # run in the benchmark harness, not here. These exercise decoding,
+        # marshalling and the public API surface, which is where a regression from
+        # a refactor is most likely to land.
+        run: |
+          dart test \
+            test/api \
+            test/mongo/bson_roundtrip_test.dart \
+            test/param_marshalling_test.dart \
+            test/repository_test.dart \
+            test/result_row_test.dart \
+            test/zero_copy_test.dart

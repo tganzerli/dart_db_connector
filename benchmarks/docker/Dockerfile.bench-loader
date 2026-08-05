@@ -1,0 +1,56 @@
+# Bench loader — wrk (https://github.com/wg/wrk) plus a paired
+# docker-stats sampler. Single container for all HTTP load runs in
+# Phase 3.
+#
+# Methodological note:
+# Original plan was to use wrk2 (Gil Tene fork — constant-throughput,
+# corrected latency). wrk2 bundles an old LuaJIT 2.0 that does NOT
+# support arm64 (Apple Silicon, AWS Graviton), so the build fails on
+# our host. wrk (upstream, wg/wrk) has multi-arch support and a
+# `--latency` flag that prints p50/p75/p90/p99. Trade-off: wrk runs
+# open-loop max-throughput (subject to coordinated omission in p99),
+# while wrk2 is closed-loop constant-rate. We document this caveat
+# in the bench page; for the cross-stack comparison the bias is
+# uniform across stacks and doesn't change the ranking.
+#
+# Same TechEmpower FrameworkBenchmarks toolset uses wg/wrk (not wrk2)
+# precisely for portability — so we're aligned with the canonical
+# reference.
+
+FROM ubuntu:22.04 AS build
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        git \
+        libssl-dev \
+        unzip \
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git clone --depth 1 https://github.com/wg/wrk.git wrk \
+    && cd wrk \
+    && make -j"$(nproc)" \
+    && cp wrk /usr/local/bin/wrk
+
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        coreutils \
+        curl \
+        docker.io \
+        jq \
+        python3 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /usr/local/bin/wrk /usr/local/bin/wrk
+# Alias under wrk2 so scripts written for wrk2 keep working.
+RUN ln -sf /usr/local/bin/wrk /usr/local/bin/wrk2
+COPY capture-docker-stats.sh /usr/local/bin/capture-docker-stats.sh
+RUN chmod +x /usr/local/bin/capture-docker-stats.sh
+
+WORKDIR /work
+ENTRYPOINT ["/bin/bash"]

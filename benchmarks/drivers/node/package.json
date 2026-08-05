@@ -1,0 +1,18 @@
+{
+  "name": "bench-node",
+  "version": "1.0.0",
+  "description": "TPC-C benchmark in Node.js using postgres.js (cross-language suite).",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "postgres": "^3.4.5",
+    "seedrandom": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

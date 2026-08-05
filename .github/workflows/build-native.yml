@@ -1,0 +1,126 @@
+name: build-native
+
+# Produces the pre-built native libraries that ship inside the package, so that
+# consumers on a supported platform need neither CMake nor a compiler.
+#
+# Four platforms x four drivers = 16 shared libraries, landing in
+# packages/dart_db_connector/lib/_native/<platform>/, which is where the resolver
+# already looks.
+#
+# Windows is absent by design, not by omission: the native pool is built on POSIX
+# threads and has no Win32 path. Adding a runner would not make it compile.
+#
+# The libraries link DYNAMICALLY against each database client. That is deliberate —
+# statically linking libmysqlclient (GPLv2) would change the licence of an MIT
+# package — so consumers still install the client libraries they use.
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64
+            runner: ubuntu-latest
+            ext: so
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            ext: so
+          - platform: macos-arm64
+            runner: macos-latest
+            ext: dylib
+          - platform: macos-x64
+            runner: macos-13
+            ext: dylib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install client libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential \
+            libpq-dev libmysqlclient-dev libmongoc-dev libsqlite3-dev
+
+      - name: Install client libraries (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake libpq mysql-client mongo-c-driver
+
+      - name: Build
+        working-directory: packages/dart_db_connector
+        run: |
+          cmake -S native/c -B native/c/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build native/c/build --parallel
+
+      - name: Collect libraries
+        working-directory: packages/dart_db_connector
+        run: |
+          set -euo pipefail
+          DEST="lib/_native/${{ matrix.platform }}"
+          mkdir -p "$DEST"
+          for lib in native_db native_mysql native_mongo native_sqlite; do
+            src="native/c/build/lib${lib}.${{ matrix.ext }}"
+            if [ ! -f "$src" ]; then
+              echo "::error::${src} was not produced"
+              exit 1
+            fi
+            cp "$src" "$DEST/"
+          done
+          ls -la "$DEST"
+
+      - name: Report dynamic dependencies
+        # Makes the runtime requirements auditable from the build log, rather than
+        # something a consumer discovers through a load failure.
+        working-directory: packages/dart_db_connector
+        run: |
+          DEST="lib/_native/${{ matrix.platform }}"
+          for f in "$DEST"/*; do
+            echo "── $f"
+            if [ "${{ runner.os }}" = "macOS" ]; then otool -L "$f"; else ldd "$f"; fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: packages/dart_db_connector/lib/_native/${{ matrix.platform }}/
+          if-no-files-found: error
+
+  collect:
+    name: collect all platforms
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages/dart_db_connector/lib/_native
+          pattern: native-*
+
+      - name: Flatten and verify
+        working-directory: packages/dart_db_connector/lib/_native
+        run: |
+          set -euo pipefail
+          for d in native-*; do
+            [ -d "$d" ] || continue
+            mv "$d" "${d#native-}"
+          done
+          expected=16
+          found=$(find . -type f \( -name '*.so' -o -name '*.dylib' \) | wc -l)
+          echo "found ${found} of ${expected} libraries"
+          find . -type f | sort
+          [ "$found" -eq "$expected" ] || { echo "::error::expected ${expected}"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-all-platforms
+          path: packages/dart_db_connector/lib/_native/
+          if-no-files-found: error

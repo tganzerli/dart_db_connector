@@ -1,0 +1,15 @@
+name: dart_pkg_mysql_http
+description: >
+  HTTP server (Shelf) backed by the `mysql_client` 0.0.27 pub.dev package
+  (pure-Dart MySQL wire protocol — the baseline MySQL driver). Counterpart
+  of the developed-driver server in bench/http/dart-native-mysql; used for
+  the intra-Dart MySQL comparison.
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  mysql_client: 0.0.27

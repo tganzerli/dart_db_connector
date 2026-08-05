@@ -1,0 +1,81 @@
+# Multi-stage build for the developed MongoDB driver bench.
+# Mirrors Dockerfile.dart-mysql: builds libnative_mongo.so (over libmongoc)
+# and AOT-compiles the YCSB runner (which also bundles the mongo_dart
+# baseline, selected at runtime via --driver).
+#
+# NOTE ON libmongoc VERSION: the local dev build uses Homebrew's 2.x; Debian
+# ships libmongoc 1.x. The C source only uses the stable CRUD + client-pool
+# API present in both, and CMake accepts either pkg-config package
+# (mongoc2 or libmongoc-1.0). The Dart binding depends only on OUR ABI
+# (native_mongo_abi_version), not libmongoc's, so either series works.
+
+# ─────────── Stage 1: builder ───────────
+FROM dart:stable AS builder
+
+# C toolchain + cmake. libpq-dev only so CMake's find_package(PostgreSQL)
+# succeeds during configure — we build ONLY the native_mongo target.
+# libmongoc-dev provides mongoc/mongoc.h + the pkg-config file + shared libs.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        pkg-config \
+        libpq-dev \
+        libmongoc-dev \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+COPY native /build/native
+COPY dart /build/dart
+COPY benchmarks /build/benchmarks
+
+RUN rm -rf /build/native/c/build \
+    && find /build -type d -name '.dart_tool' -exec rm -rf {} + 2>/dev/null || true
+
+# Build ONLY libnative_mongo.so for Linux (skip the MySQL + SQLite targets;
+# their find_package(MySQL/SQLite3) would otherwise fail without their -dev
+# packages installed in this image).
+RUN cd /build/native/c \
+    && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_NATIVE_MYSQL=OFF -DBUILD_NATIVE_SQLITE=OFF \
+    && cmake --build build --target native_mongo
+
+RUN cd /build/dart && dart pub get
+RUN cd /build/benchmarks && dart pub get
+
+RUN mkdir -p /out \
+    && cd /build/benchmarks \
+    && dart compile exe scripts/ycsb/bench_ycsb_mongo.dart -o /out/bench_ycsb_mongo
+
+# Place the .so at the resolver's pub-cache-mirror path so the AOT exe finds
+# it via lib/_native/<os>-<arch>/ (native_lib_loader path #2).
+RUN MACHINE="$(uname -m)" \
+    && case "$MACHINE" in \
+         aarch64) ARCH=arm64 ;; \
+         x86_64)  ARCH=x64 ;; \
+         *)       ARCH="$MACHINE" ;; \
+       esac \
+    && PLAT="linux-$ARCH" \
+    && mkdir -p "/out/lib/_native/$PLAT" \
+    && cp /build/native/c/build/libnative_mongo.so "/out/lib/_native/$PLAT/" \
+    && echo "[dockerfile] native lib at /out/lib/_native/$PLAT/libnative_mongo.so"
+
+# ─────────── Stage 2: runtime ───────────
+FROM debian:stable-slim
+
+# libmongoc-1.0-0 = the client shared lib linked above (pulls libbson).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libmongoc-1.0-0 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /out/ /app/
+
+ENV LD_LIBRARY_PATH=/app:${LD_LIBRARY_PATH}
+
+VOLUME ["/outputs"]
+
+ENTRYPOINT ["/app/bench_ycsb_mongo"]
+CMD ["--driver", "native-mongo", "--workload", "C", "--conns", "4", "--ops", "40000", "--reps", "3"]

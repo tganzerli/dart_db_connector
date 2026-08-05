@@ -1,0 +1,17 @@
+[package]
+name = "bench-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.42", features = ["full"] }
+tokio-postgres = "0.7"
+deadpool-postgres = "0.14"
+clap = { version = "4.5", features = ["derive"] }
+rand = "0.8"
+rand_chacha = "0.3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

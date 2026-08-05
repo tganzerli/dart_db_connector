@@ -1,0 +1,14 @@
+name: bench_http_dart_pkg
+description: >
+  Phase 3 HTTP server (Shelf) backed by the canonical `postgres` 3.5.11
+  pub.dev package (pure-Dart wire protocol implementation). Counterpart
+  of bench_http_dart_native; used for the intra-Dart comparison.
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  postgres: 3.5.11

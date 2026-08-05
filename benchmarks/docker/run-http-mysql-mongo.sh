@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# HTTP end-to-end benchmark against MySQL and MongoDB, with N independent
+# sessions per cell and 95% confidence intervals.
+#
+# Sibling of run-http-postgres.sh, covering the six MySQL/MongoDB servers. Every
+# (stack, endpoint, topology, vCPU, session) combination is an isolated Docker
+# session: down -v -> fresh database (mysql OR mongo, depending on the stack
+# family) -> seed -> start server -> warmup -> sustained wrk -> down -v. The
+# per-session mean is the unit of inference. Runs in its own Compose project and
+# network so it cannot interfere with the PostgreSQL suite.
+#
+# Loop order: vCPU -> session -> stack -> endpoint -> topology. One CSV per session.
+# Output: outputs/http-mysql-mongo/http_<stack>_<endpoint>_<topo>_c<vcpu>_s<session>.csv
+#         Columns: stack,endpoint,topology,vcpu,session,rep,rps,p50_us,p75_us,p90_us,p99_us
+#
+# Default matrix: 4 DB-bound endpoints x 2 pool sizes x 4 vCPU x 5 sessions x
+# 6 stacks = 240 runs. The plaintext/json endpoints are framework-bound rather
+# than driver-bound and are excluded by default; add them with --endpoints.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+DC="docker compose -f compose.http-mysql-mongo.yml"
+SCHEMA_MYSQL="../../bench/http/schema_mysql.sql"
+SEED_MONGO="../../bench/http/seed_mongo.js"
+
+SESSIONS="${SESSIONS:-5}"
+VCPUS="${VCPUS:-4}"
+REPS="${REPS:-1}"
+WARMUP_SEC="${WARMUP_SEC:-20}"
+SUSTAINED_SEC="${SUSTAINED_SEC:-45}"
+WRK_THREADS="${WRK_THREADS:-2}"
+WRK_CONNS="${WRK_CONNS:-64}"
+OUTDIR="${OUTDIR:-./outputs/http-mysql-mongo}"
+LOGFILE="${OUTDIR}/run.log.jsonl"
+mkdir -p "$OUTDIR"
+
+STACKS=(dart-native-mysql dart-pkg-mysql go-mysql dart-native-mongo dart-pkg-mongo go-mongo)
+ENDPOINTS=(db queries updates fortunes)
+TOPOLOGIES=(1 64)
+DRY_RUN=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --stacks) IFS=',' read -r -a STACKS <<< "$2"; shift 2 ;;
+    --endpoints) IFS=',' read -r -a ENDPOINTS <<< "$2"; shift 2 ;;
+    --topologies) IFS=',' read -r -a TOPOLOGIES <<< "$2"; shift 2 ;;
+    --vcpus) VCPUS="$2"; shift 2 ;;
+    --sessions) SESSIONS="$2"; shift 2 ;;
+    --reps) REPS="$2"; shift 2 ;;
+    *) echo "[error] unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+read -r -a VCPU_ARR <<< "$VCPUS"
+
+db_family() { case "$1" in *mongo*) echo mongo ;; *) echo mysql ;; esac; }
+
+log_event() {
+  local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+  python3 -c "
+import json, sys
+d = dict(ts='$ts')
+for kv in sys.argv[1:]:
+    k, _, v = kv.partition('=')
+    d[k] = v
+print(json.dumps(d, ensure_ascii=False))
+" "$@" >> "$LOGFILE"
+}
+
+wait_db_healthy() {
+  local svc="$1" timeout=90 elapsed=0
+  while [ $elapsed -lt $timeout ]; do
+    $DC ps "$svc" --format json 2>/dev/null | grep -q '"Health":"healthy"' && return 0
+    sleep 1; elapsed=$((elapsed + 1))
+  done
+  echo "[error] $svc not healthy within ${timeout}s" >&2; return 1
+}
+
+seed_db() {
+  local family="$1"
+  if [ "$family" = mysql ]; then
+    $DC exec -T mysql sh -c 'mysql -ubench -p123 teste' < "$SCHEMA_MYSQL" >/dev/null 2>&1
+  else
+    $DC exec -T mongo mongosh --quiet "mongodb://127.0.0.1:27017/teste" < "$SEED_MONGO" >/dev/null 2>&1
+  fi
+}
+
+wait_http_ready() {
+  local service="$1" timeout=45 elapsed=0
+  while [ $elapsed -lt $timeout ]; do
+    docker run --rm --network ddc-bench-1b-net curlimages/curl:latest \
+      -sf --max-time 1 "http://${service}:8080/plaintext" >/dev/null 2>&1 && return 0
+    sleep 1; elapsed=$((elapsed + 1))
+  done
+  return 1
+}
+
+endpoint_path() {
+  case "$1" in
+    plaintext) echo "/plaintext" ;; json) echo "/json" ;; db) echo "/db" ;;
+    queries) echo "/queries?count=20" ;; updates) echo "/updates?count=20" ;; fortunes) echo "/fortunes" ;;
+    *) echo "[error] endpoint desconhecido: $1" >&2; return 2 ;;
+  esac
+}
+
+isolated_run() {
+  local stack="$1" endpoint="$2" topology="$3" vcpu="$4" session="$5" rep="$6"
+  local service="http-${stack}"
+  local family; family=$(db_family "$stack")
+  local out="${OUTDIR}/http_${stack}_${endpoint}_${topology}_c${vcpu}_s${session}.csv"
+
+  if [ "$DRY_RUN" = "1" ]; then echo "[dry] $stack ($family) $endpoint t=$topology c=$vcpu s=$session r=$rep"; return 0; fi
+
+  $DC down -v 2>/dev/null || true
+  export DB_CPUS="$vcpu" HTTP_CPUS="$vcpu"
+  $DC up -d "$family" >/dev/null
+  wait_db_healthy "$family" || { log_event event=fail reason=db stack="$stack"; return 1; }
+  seed_db "$family" || { log_event event=fail reason=seed stack="$stack"; return 1; }
+  POOL_SIZE="$topology" $DC up -d "$service" >/dev/null \
+    || { log_event event=fail reason=up stack="$stack"; return 1; }
+  wait_http_ready "$service" || { log_event event=fail reason=notready stack="$stack"; $DC down -v 2>/dev/null||true; return 1; }
+
+  local url; url=$(endpoint_path "$endpoint")
+  # warmup (descartado)
+  $DC run --rm --no-deps --entrypoint /usr/local/bin/wrk bench-loader \
+    -t"$WRK_THREADS" -c"$WRK_CONNS" -d"${WARMUP_SEC}s" -H "Connection: keep-alive" \
+    "http://${service}:8080${url}" >/dev/null 2>&1 || true
+  # sustained (medido)
+  local wrk_stdout; wrk_stdout=$($DC run --rm --no-deps --entrypoint /usr/local/bin/wrk bench-loader \
+    -t"$WRK_THREADS" -c"$WRK_CONNS" -d"${SUSTAINED_SEC}s" --latency -H "Connection: keep-alive" \
+    "http://${service}:8080${url}" 2>&1 || true)
+
+  WRK_STDOUT="$wrk_stdout" STACK="$stack" ENDPOINT="$endpoint" TOPOLOGY="$topology" \
+  VCPU="$vcpu" SESSION="$session" REP="$rep" WRK_OUT="$out" \
+  python3 <<'EOF' >> "$out"
+import os, re
+out=os.environ["WRK_STDOUT"]
+def grab(p,d="NaN"):
+    m=re.search(p,out,re.MULTILINE); return m.group(1) if m else d
+rps=grab(r"^\s*Requests/sec:\s+([\d.]+)")
+def pct(p):
+    m=re.search(rf"^\s*{p}(?:\.0+)?%\s+([\d.]+)(us|ms|s)\b",out,re.MULTILINE)
+    if not m: return "NaN"
+    v=float(m.group(1)); u=m.group(2); return str(v*(1 if u=='us' else 1000 if u=='ms' else 1_000_000))
+p50,p75,p90,p99=pct("50"),pct("75"),pct("90"),pct("99")
+w=os.environ["WRK_OUT"]
+if (not os.path.exists(w)) or os.path.getsize(w)==0:
+    print("stack,endpoint,topology,vcpu,session,rep,rps,p50_us,p75_us,p90_us,p99_us")
+print(f"{os.environ['STACK']},{os.environ['ENDPOINT']},{os.environ['TOPOLOGY']},{os.environ['VCPU']},{os.environ['SESSION']},{os.environ['REP']},{rps},{p50},{p75},{p90},{p99}")
+EOF
+
+  $DC down -v 2>/dev/null || true
+  log_event event=ok stack="$stack" endpoint="$endpoint" topology="$topology" vcpu="$vcpu" session="$session" rep="$rep"
+  sleep 5
+}
+
+if [ "$DRY_RUN" != "1" ] && [ "${SKIP_BUILD:-0}" != "1" ]; then
+  echo "[setup] build (6 servers + loader) ..."; $DC build 2>&1 | tail -3 || true
+elif [ "${SKIP_BUILD:-0}" = "1" ]; then
+  echo "[setup] SKIP_BUILD=1 — assumindo imagens já construídas (wrapper pré-buildou)."
+fi
+n=$(( ${#VCPU_ARR[@]} * SESSIONS * ${#STACKS[@]} * ${#ENDPOINTS[@]} * ${#TOPOLOGIES[@]} * REPS ))
+echo "[setup] $(date -u +%FT%TZ) | ${#VCPU_ARR[@]} vCPU × ${SESSIONS} sessões × ${#STACKS[@]} stacks × ${#ENDPOINTS[@]} endpoints × ${#TOPOLOGIES[@]} pool × ${REPS} reps = ${n} runs"
+log_event event=session-start n="$n" vcpus="$VCPUS" sessions="$SESSIONS" stacks="${STACKS[*]}" endpoints="${ENDPOINTS[*]}" topologies="${TOPOLOGIES[*]}" reps="$REPS"
+
+start=$(date +%s); failed=0; done_n=0
+for vcpu in "${VCPU_ARR[@]}"; do
+  for session in $(seq 1 "$SESSIONS"); do
+    for stack in "${STACKS[@]}"; do
+      for endpoint in "${ENDPOINTS[@]}"; do
+        for topology in "${TOPOLOGIES[@]}"; do
+          for rep in $(seq 1 "$REPS"); do
+            echo "########## c=$vcpu s=$session/$SESSIONS | $stack $endpoint pool=$topology r=$rep ($(date -u +%H:%M:%S)Z) ##########"
+            if ! isolated_run "$stack" "$endpoint" "$topology" "$vcpu" "$session" "$rep"; then
+              failed=$((failed+1)); echo "[retry] $stack $endpoint $topology c=$vcpu s=$session"
+              isolated_run "$stack" "$endpoint" "$topology" "$vcpu" "$session" "$rep" || echo "[skip] falha dupla: $stack $endpoint $topology c=$vcpu s=$session"
+            fi
+            done_n=$((done_n+1))
+          done
+        done
+      done
+    done
+  done
+done
+end=$(date +%s); el=$((end-start))
+echo "[done] ${done_n} runs em $((el/3600))h $(((el%3600)/60))m; ${failed} retries"
+log_event event=session-end elapsed_s="$el" retries="$failed"

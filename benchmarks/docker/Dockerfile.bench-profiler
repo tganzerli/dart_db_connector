@@ -1,0 +1,29 @@
+# Bench profiler — perf + Brendan Gregg's FlameGraph toolkit.
+#
+# Runs alongside an HTTP target container; samples its main process
+# (--pid=host required at run time) for 30s and renders a flamegraph SVG.
+#
+# Needs --cap-add=SYS_ADMIN --cap-add=PERFMON (or --privileged) at runtime
+# for perf_event_open to succeed. This compromises isolation of the
+# profiler container only — the HTTP target stays unprivileged.
+
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+        linux-tools-generic \
+        perl \
+        procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# linux-tools-generic installs perf as a versioned binary; symlink to
+# a stable path so scripts can rely on `perf` being on PATH.
+RUN ln -s "$(find /usr/lib/linux-tools-* -name perf | head -1)" /usr/local/bin/perf
+
+RUN git clone --depth 1 https://github.com/brendangregg/FlameGraph /opt/flamegraph
+ENV PATH="/opt/flamegraph:$PATH"
+
+WORKDIR /work
+ENTRYPOINT ["/bin/bash"]
