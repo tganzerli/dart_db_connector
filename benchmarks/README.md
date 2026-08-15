@@ -51,6 +51,66 @@ This is not optional. Running drivers back to back in a shared session produced 
 158x tail-latency artifact that did not reproduce under isolation, which is the
 reason the protocol exists.
 
+## Host contention
+
+The isolation protocol above stops one run from contaminating the next. It does
+nothing about the machine underneath, and that gap is worth more than it sounds.
+
+Background work on the host does not add noise that averages out. It steals CPU,
+so it penalises whichever stack is closest to saturating the machine and leaves
+the slower ones untouched. The result is a **systematic reordering** of a
+cross-stack comparison, in the direction that flatters the slower stack.
+
+Measured on the reference host, on the same cell (`/db`, pool 64, 4 vCPU), by
+suspending and resuming the background daemons:
+
+| Background CPU | Throughput | Deviation |
+|---|---|---|
+| 89% | 62,091 rps | -17% |
+| 0% (suspended) | 74,739 rps | -0.04% |
+| 79% (running again) | 59,751 rps | -20% |
+
+Over a full battery the two fastest stacks lost 17-29% while every other stack
+stayed within noise. Nothing in container-level instrumentation shows this: the
+containers were perfectly healthy, they simply had less machine to run on.
+
+Two traps specific to macOS hosts, both of which cost us real time:
+
+- **Spotlight indexing (`mds_stores`) and photo analysis (`mediaanalysisd`)**
+  can take more than a full core for hours. macOS schedules them precisely when
+  the machine looks idle, so **resting the machine between runs makes this
+  worse, not better**. Ten, twenty and thirty minute pauses produced no recovery
+  at all in our tests.
+- **It is not thermal.** On a fanless machine that is the obvious suspect, and it
+  is wrong. Chassis temperature returned below baseline while throughput stayed
+  22% down, and the effect is bimodal rather than a curve.
+
+What to do:
+
+1. Run `capture-host-load.sh` for the whole battery and join it against your run
+   log by timestamp. Decide which cells to discard from the **environment**
+   covariate, never from the result: selecting on the outcome is how a
+   measurement error becomes a publication error. Fix the threshold before you
+   look at the data.
+2. Gate the start with `check-host-quiet.sh`, or simply reboot first. Checking
+   costs seconds; a contaminated battery costs hours.
+3. On macOS you can pause the two daemons for the duration of a run. This is
+   reversible and changes no persistent configuration:
+
+   ```sh
+   killall -STOP mediaanalysisd photoanalysisd   # before
+   killall -CONT mediaanalysisd photoanalysisd   # after, always
+   ```
+
+   `mds_stores` runs as root and needs `sudo`. Leaving it alone is fine as long
+   as `capture-host-load.sh` is recording, so any residual contamination stays
+   visible rather than invisible.
+
+The general rule this cost three wrong diagnoses to learn: **when a measurement
+disagrees with a reference, look outside the container before blaming the
+instrument.** We blamed the collector, then swap, and both were wrong, because
+everything instrumented was inside the container.
+
 ## Statistics
 
 The unit of inference is the **per-session mean**, not the individual request.
