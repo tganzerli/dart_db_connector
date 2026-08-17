@@ -38,7 +38,11 @@ probe() {
   ps -Ao pcpu,comm | awk '
     NR == 1 { next }
     { cpu = $1; n = $2
-      if (n ~ /[Dd]ocker|qemu|virtiofsd|vpnkit|com\.docker|containerd/) next
+      # Docker Desktop >= 29 on macOS names its VM
+      # com.apple.Virtualization.VirtualMachine and it matches none of the other
+      # patterns, so without this the gate counts your own containers as foreign
+      # contention and never opens once anything is running.
+      if (n ~ /[Dd]ocker|qemu|virtiofsd|vpnkit|com\.docker|containerd|Virtualization\.VirtualMachine/) next
       if (n ~ /ps$|awk$|sleep$/) next
       f += cpu
       if (cpu > tc) { tc = cpu; tn = n }

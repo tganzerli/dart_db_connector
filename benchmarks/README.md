@@ -84,6 +84,18 @@ Two traps specific to macOS hosts, both of which cost us real time:
 - **It is not thermal.** On a fanless machine that is the obvious suspect, and it
   is wrong. Chassis temperature returned below baseline while throughput stayed
   22% down, and the effect is bimodal rather than a curve.
+- **Rebooting does not clean the machine.** An earlier version of this file
+  suggested it. Measured since: a reboot did zero `mediaanalysisd` and
+  `mds_stores`, and then *started* a CoreSpotlight knowledge rebuild
+  (`spotlightknowledged` at 99.6%) plus APFS maintenance (`apfsd` at 42.4%). A
+  battery launched four minutes after a clean health probe measured the fastest
+  stack **17.0% below** its reference and had to be discarded. A reboot **swaps
+  one set of daemons for another**, and the new set is exactly the one nobody is
+  watching yet.
+- **The watched-daemon list is never complete.** Neither of those two was on
+  ours. Nor was `XprotectService`, later caught at 451%. Watch broadly and keep
+  `foreign` as the catch-all column, because it is the only one that can see a
+  contaminant you have not thought of.
 
 What to do:
 
@@ -92,24 +104,75 @@ What to do:
    covariate, never from the result: selecting on the outcome is how a
    measurement error becomes a publication error. Fix the threshold before you
    look at the data.
-2. Gate the start with `check-host-quiet.sh`, or simply reboot first. Checking
-   costs seconds; a contaminated battery costs hours.
-3. On macOS you can pause the two daemons for the duration of a run. This is
-   reversible and changes no persistent configuration:
+2. Gate the start with `check-host-quiet.sh`. Do **not** rely on a reboot
+   instead, for the reason above. And note that a one-shot probe describes the
+   next few seconds, not the next nine hours: our contaminated battery passed
+   its health check honestly, four minutes before the indexer woke up.
+3. On macOS you can pause the user-owned daemons for the duration of a run. This
+   is reversible and changes no persistent configuration:
 
    ```sh
-   killall -STOP mediaanalysisd photoanalysisd   # before
-   killall -CONT mediaanalysisd photoanalysisd   # after, always
+   killall -STOP mediaanalysisd photoanalysisd spotlightknowledged   # before
+   killall -CONT mediaanalysisd photoanalysisd spotlightknowledged   # after, always
    ```
 
-   `mds_stores` runs as root and needs `sudo`. Leaving it alone is fine as long
-   as `capture-host-load.sh` is recording, so any residual contamination stays
-   visible rather than invisible.
+   **Suspend first, then gate.** We had it the other way round once and a
+   battery sat for 2h15 waiting for a daemon it had the power to silence; worse,
+   these daemons cycle, so waiting for N *consecutive* quiet samples may never
+   converge. With the right order the gate only has to test what you cannot
+   suspend.
+
+   `mds_stores`, `apfsd` and `XprotectService` run as root and need `sudo`.
+   Leaving them alone is fine as long as `capture-host-load.sh` is recording, so
+   residual contamination stays visible rather than invisible.
+4. **Calibrate the discard threshold against an idle baseline before trusting
+   it.** We changed which column the rule read and kept the old threshold, which
+   silently invalidated it: on a completely idle machine the broader metric sits
+   at 18.7% median with excursions past 200%, so a parked host would have been
+   flagged. A threshold is only meaningful next to the metric it was set for.
 
 The general rule this cost three wrong diagnoses to learn: **when a measurement
 disagrees with a reference, look outside the container before blaming the
 instrument.** We blamed the collector, then swap, and both were wrong, because
 everything instrumented was inside the container.
+
+## Where you draw the measurement boundary decides the ranking
+
+If you report CPU per request, the boundary is not a detail. It changes who wins.
+
+Measuring only the application container is the obvious choice and it is wrong
+for a driver comparison, because a driver can push work **across** the boundary.
+Measured here on `/db`, the share of the per-request cost that sits in the
+**database** container ranges from **34.6%** to **73.5%** depending on the stack.
+Counting the database moved **six of eight stacks** in the ranking. The most
+frugal-looking stack on the application side, at 0.034 ms/req, fell from **1st to
+5th** once its 0.094 ms/req of database work was counted.
+
+Three boundaries, three legitimate and different answers:
+
+| Boundary | Contains | Answers |
+|---|---|---|
+| application only | server + driver + runtime | almost nothing on its own |
+| **application + database** | the above + the DB container | which **full stack** costs less |
+| **driver only, no HTTP** | driver + runtime | what the **driver** costs |
+
+The same implementation was 4th cheapest under one boundary and 1st under
+another, with no number being wrong. Publishing either without naming the
+boundary is the error.
+
+Two practical consequences:
+
+- **Instrument the database container too**, not just the application. It is one
+  extra `capture-cgroup-stats.sh` against the DB container name.
+- **Watch the database container's own CPU ceiling.** Giving the database the
+  same quota as the application is a uniform-looking rule that only bites stacks
+  that work the database hard, so it discriminates exactly like host contention
+  does. Two stacks here ran their database at 390-396% of a 400% cap at their own
+  optimum while another sat at 102%. Doubling the database quota was worth **+25%
+  and +12%** to the two that were capped, and **-0.5%** to one that was limited by
+  its own application container -- a null control that tells you the effect is
+  real. If a stack's database container is near its ceiling, you are measuring
+  your bench, not that stack.
 
 ## Statistics
 

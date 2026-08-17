@@ -60,8 +60,18 @@ emit() {
     {
       cpu = $1; name = $2
       total += cpu
-      if (name ~ /mediaanalysisd|mds_stores|photoanalysisd|mdworker/)      { daemon += cpu; next }
-      if (name ~ /[Dd]ocker|qemu|virtiofsd|vpnkit|com\.docker|containerd/) { dock   += cpu; next }
+      # The watched list is deliberately wide. A narrower earlier version
+      # reported daemon = 0.0% for an entire battery while Spotlight knowledge
+      # indexing and APFS maintenance were between them taking 117% of a core.
+      # Watching only the daemons you already suspect reproduces, in miniature,
+      # the blind spot this file exists to close. Assume the list is still
+      # incomplete -- that is why `foreign` is recorded next to it.
+      if (name ~ /mediaanalysisd|mds|mdworker|photoanalysisd|spotlightknowledged|apfsd|XprotectService|mobileassetd/) { daemon += cpu; next }
+      # Docker Desktop >= 29 on macOS runs its VM as
+      # com.apple.Virtualization.VirtualMachine, which matches none of the
+      # patterns below. Without this clause the VM -- that is, YOUR BENCHMARK --
+      # lands in `foreign` at 300-800% and the covariate becomes unusable.
+      if (name ~ /[Dd]ocker|qemu|virtiofsd|vpnkit|com\.docker|containerd|Virtualization\.VirtualMachine/) { dock += cpu; next }
       if (name ~ /ps$|awk$|sleep$/)                                        { next }
       foreign += cpu
       if (cpu > topcpu) { topcpu = cpu; topname = name }
