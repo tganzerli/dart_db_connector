@@ -1,5 +1,12 @@
 # dart_db_connector
 
+> **The packages now live on pub.dev under new names.** The connector evaluated here is published as
+> [`slingshot_postgres`](https://pub.dev/packages/slingshot_postgres), on the shared contract
+> [`slingshot`](https://pub.dev/packages/slingshot), and the HTTP framework built from these results as
+> [`orbiter`](https://pub.dev/packages/orbiter), with [`orbiter_postgres`](https://pub.dev/packages/orbiter_postgres)
+> for row-level security. Install those; the `dart_db_connector` package below is not on pub.dev. This repository
+> keeps the code and the benchmark suite evaluated in the thesis; the tag `tcc-baseline` marks that state.
+
 A high-performance, multi-database connector for Dart backends, plus the benchmark
 suite used to measure it.
 
