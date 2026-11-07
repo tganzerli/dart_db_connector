@@ -1,0 +1,7 @@
+rep,mode,total_us,tps,us_per_tx
+1,sequential,1268322,788.44,1268.32
+1,pipeline,261873,3818.64,261.87
+2,sequential,1176957,849.65,1176.96
+2,pipeline,251886,3970.05,251.89
+3,sequential,1164829,858.50,1164.83
+3,pipeline,256497,3898.68,256.50

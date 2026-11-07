@@ -26,7 +26,8 @@ same time window. Throughput in transactions per second:
 | 4x4 | **developed 1790.2** | Node 1143.0 ≈ pub.dev 1126.5 ≈ Python 1122.8 | Go 1036.0 ≈ Rust 1035.9 > Java 497.3 |
 
 The connector leads both topologies by a distinguishable margin. At 4x4 the tail
-outlier moves to Java, whose JDBC pool does not scale across connections.
+outlier moves to Java, which ran without an external connection pool (a declared
+handicap); per-transaction p99 is in [`reports/tpcc-tail-latency.md`](reports/tpcc-tail-latency.md).
 
 ### HTTP end-to-end
 
@@ -55,6 +56,12 @@ tapering to +4-6% on database-bound endpoints.
 
 That gap was the HTTP framework, not the driver. Worth stating plainly, because the
 opposite conclusion would have been the convenient one.
+
+### More results
+
+- [Tail latency (p99) by TPC-C transaction type](reports/tpcc-tail-latency.md)
+- [Pipeline mode vs sequential round-trips](reports/pipeline-vs-sequential.md)
+- [Connection pool size sweep, HTTP `/db`](reports/pool-size-sweep.md)
 
 ---
 
