@@ -57,7 +57,7 @@ Read these before quoting the number.
 
 - **Synthetic, write-only workload.** Ten independent inserts is the best case for pipelining. A typical
   OLTP transaction reads something and decides what to write next; the PostgreSQL documentation states that
-  pipelining is not useful when one operation needs the result of the previous one.
+  pipelining is not useful when the client needs the result of one operation to build the next one.
 - **Round-trip cost is environment-specific.** Docker networking on macOS makes each round-trip relatively
   expensive. On Linux over a Unix socket the sequential side would be faster and the relative gain could
   shrink; across a real network it could grow.
