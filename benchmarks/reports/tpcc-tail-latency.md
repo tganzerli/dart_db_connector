@@ -77,8 +77,7 @@ SESSIONS_PER_COMBO=5 REPS=5 TX_COUNT=10000 bash run-driver-postgres.sh   # hours
 - **Prepared statements were disabled in every driver** to compare wire cost on equal terms. Drivers that
   benefit from server-side prepared statements (asyncpg, pgx) are penalised uniformly.
 - **Absolute values are host-specific.** Docker on macOS arm64 over loopback. What should reproduce is the
-  ordering and the shape of the tail, not the magnitudes; on x86_64 the tail picture of some drivers
-  changes (see the limitations in [`RESULTS.md`](../RESULTS.md#limitations)).
+  ordering and the shape of the tail, not the magnitudes. This tail table was measured on arm64 only.
 - **Different RNG per language.** The transaction mix is statistically equivalent across drivers, not
   bit-identical.
 - **No p99.9.** The harness records p50, p95 and p99 only.

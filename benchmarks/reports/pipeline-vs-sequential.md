@@ -47,6 +47,10 @@ dart run scripts/pipeline_vs_sequential.dart
 
 Source: [`harness-dart/scripts/pipeline_vs_sequential.dart`](../harness-dart/scripts/pipeline_vs_sequential.dart).
 
+The connector in this repository is newer than the one measured, and it has since learned to fuse `BEGIN`
+with the following statement on some paths. A re-run may therefore send fewer than 12 round-trips on the
+sequential side, and its numbers can differ from the table above.
+
 ## Caveats
 
 Read these before quoting the number.

@@ -28,7 +28,8 @@ There is no single right pool size: each stack has its own optimum.
 - **Still climbing at 64:** Go, Java and Python. A later extension to 128 and 256 connections, on the same
   machine, added only +2.3% for Go and +1.7% for Java, against +22.8% and +16.0% from 16 to 64, so 64 was
   already their practical optimum.
-- **Peak at 16, then a small drop:** Rust, the pure-Dart package and the earlier version of this connector.
+- **Peak at 16, then a drop:** Rust (−3.8% at 64), the earlier version of this connector (−0.4%) and the
+  pure-Dart package (−14.0%).
 - **Flat from 4:** this connector reaches its plateau at 4 connections and stays there up to 64 (26,592 to
   25,981, −2.3%). In this range it is not limited by connection concurrency; adding connections buys
   nothing.
@@ -62,9 +63,10 @@ docker compose -f compose.postgres.yml build
 bash run-http-postgres.sh --endpoints db --topologies 1,4,16,64 --vcpus 4 --sessions 3
 ```
 
-It runs the same stacks, endpoint and pool sizes with the same isolation per cell, but does not suspend the
-host daemons or record host load for you; see the host-load section of the
-[benchmark README](../README.md).
+It runs seven of the eight stacks, the same endpoint and pool sizes, with the same isolation per cell. The
+earlier version of this connector is not available in these scripts, and the script names the Dart stacks
+`dart-native` (this connector) and `dart-pkg` (the pure-Dart package). It also does not suspend the host
+daemons or record host load for you; see the host-load section of the [benchmark README](../README.md).
 
 ## Caveats
 
@@ -77,3 +79,5 @@ host daemons or record host load for you; see the host-load section of the
   throughput only.
 - **Only PostgreSQL 16, only `/db`.** Endpoints with more queries per request may have different optima.
 - **Eight cells** were flagged by the host-load covariate after a re-run; they are reported, not removed.
+  The flagging metric had a non-zero idle baseline, so this count is an upper bound on contamination, not an
+  estimate of it.
